@@ -55,11 +55,11 @@ pub fn GenericNode(comptime T: type) type {
             const PtrType = @TypeOf(ptr);
             const ptr_info = @typeInfo(PtrType);
 
-            if (ptr_info != .Pointer) {
+            if (ptr_info != .pointer) {
                 @compileError("Node init requires a pointer type.");
             }
 
-            if (ptr_info.Pointer.size != .One) {
+            if (ptr_info.pointer.size != .one) {
                 @compileError("When initializing a GenericNode pointer must be to a single item/struct");
             }
 

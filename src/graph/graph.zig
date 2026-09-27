@@ -58,8 +58,8 @@ pub fn Graph(comptime T: type) type {
 
         pub fn init(allocator: std.mem.Allocator, opts: GraphOptions) Self {
             return .{
-                .nodes = std.ArrayList(GenericNode).init(allocator),
-                .edges = std.ArrayList(Edges).init(allocator),
+                .nodes = .empty,
+                .edges = .empty,
                 .allocator = allocator,
                 .options = opts,
             };
@@ -70,14 +70,14 @@ pub fn Graph(comptime T: type) type {
                 node.destroy();
             }
 
-            self.nodes.deinit();
-            self.edges.deinit();
+            self.nodes.deinit(self.allocator);
+            self.edges.deinit(self.allocator);
         }
 
         /// Creates a directed connection between two nodes.
         /// Adds an edge from the `from` node to the `to` node.
         pub fn connect(self: *Self, from: NodeHandle, to: NodeHandle) !void {
-            try self.edges.append(.{ .from = from.index, .to = to.index });
+            try self.edges.append(self.allocator, .{ .from = from.index, .to = to.index });
         }
 
         /// Adds a new node to the graph and returns a handle to it.
@@ -85,7 +85,7 @@ pub fn Graph(comptime T: type) type {
         pub fn addNode(self: *Self, node: anytype) !NodeHandle {
             const generic_node = try GenericNode.createNode(self.allocator, node);
             const index = self.nodes.items.len;
-            try self.nodes.append(generic_node);
+            try self.nodes.append(self.allocator, generic_node);
 
             return .{ .index = index, .graph = self };
         }
@@ -98,12 +98,15 @@ pub fn Graph(comptime T: type) type {
 
         /// Exports the graph to a DOT format file for visualization.
         /// The output is compatible with tools like Graphviz.
-        pub fn debugGraph(self: Self, path: []const u8) !void {
-            var file = try std.fs.cwd().createFile(path, .{});
-            defer file.close();
+        pub fn debugGraph(self: Self, io: std.Io, path: []const u8) !void {
+            var file = try std.Io.Dir.cwd().createFile(io, path, .{});
+            defer file.close(io);
 
-            const writer = file.writer();
+            var buffer: [4096]u8 = undefined;
+            var file_writer = file.writer(io, &buffer);
+            const writer = &file_writer.interface;
             try self.exportDot(writer);
+            try writer.flush();
         }
 
         // Performs a topological sort of the graph, returning a `TopologyQueue`.
@@ -275,14 +278,14 @@ pub const TopologyQueue = struct {
     pub fn analyzeBufferRequirementsAlloc(queue: *TopologyQueue) !usize {
 
         // ref_counts keeps track of the number of references to each node
-        var ref_counts = std.ArrayList(usize).init(queue.allocator);
+        var ref_counts: std.ArrayList(usize) = .empty;
         // free_buffers keeps track of the indexes of the buffers that are not being used
-        var free_buffers = std.ArrayList(usize).init(queue.allocator);
+        var free_buffers: std.ArrayList(usize) = .empty;
 
-        defer ref_counts.deinit();
-        defer free_buffers.deinit();
+        defer ref_counts.deinit(queue.allocator);
+        defer free_buffers.deinit(queue.allocator);
 
-        try ref_counts.resize(queue.nodes.len);
+        try ref_counts.resize(queue.allocator, queue.nodes.len);
         @memset(ref_counts.items, 0);
 
         // reference counting
@@ -305,7 +308,7 @@ pub const TopologyQueue = struct {
                     // must not be null otherwise there is a bug
                     const buffer_idx = queue.nodes.items(.buffer_index)[input_queue_idx].?;
 
-                    try free_buffers.append(buffer_idx);
+                    try free_buffers.append(queue.allocator, buffer_idx);
                 }
             }
 
@@ -563,9 +566,9 @@ test "TopologyQueue: Complex Graph" {
     try std.testing.expectEqual(3, required_buffers);
 
     // Step 1: Collect the queue indices of each node for verification
-    var node_queue_indices = std.ArrayList(usize).init(allocator);
-    defer node_queue_indices.deinit();
-    try node_queue_indices.resize(graph.nodes.items.len);
+    var node_queue_indices: std.ArrayList(usize) = .empty;
+    defer node_queue_indices.deinit(allocator);
+    try node_queue_indices.resize(allocator, graph.nodes.items.len);
 
     for (queue.nodes.items(.graph_index), 0..) |node_idx, i| {
         node_queue_indices.items[node_idx] = i;
@@ -601,4 +604,10 @@ test "TopologyQueue: Complex Graph" {
     try std.testing.expect(buff_idx_a == buff_idx_e); // A and E share buffer 1
     try std.testing.expect(buff_idx_f == buff_idx_d); // F reuses buffer 2 from D
     try std.testing.expect(buff_idx_d != buff_idx_b); // D should not share buffer with B
+}
+
+test {
+    _ = bitmap;
+    _ = nodes;
+    _ = scheduler;
 }
