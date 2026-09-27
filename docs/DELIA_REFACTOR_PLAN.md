@@ -579,7 +579,7 @@ Prefer readable scalar kernels over a generic kernel framework invented before t
 Listed in working order (M1, M3, M2, M4).
 
 - [x] Record the exact starting commit, compiler version, dependency versions, and current build/test failures. Done: commit `b1aaad0`, Zig 0.16.0, zBench v0.13.0, 114/114 tests passing, `minimum_zig_version` set in the manifest. [D6]
-- [ ] Tag the reference point (for example `pre-refactor`) so old implementations stay reachable for comparison.
+- [x] Tag the reference point (for example `pre-refactor`) so old implementations stay reachable for comparison.
 - [x] Write `docs/buffer-contract.md`, including the node I/O contract.
 - [x] Implement `src/core/buffer/block.zig` (`AudioBlock`, `ConstAudioBlock`) against the contract and add it to a `test` block reachable from `src/main.zig`.
 - [x] Implement `OwnedAudioBuffer` and `AudioBufferPool`, then the block operations (`clear`, `copy`, `accumulate`, `interleave`, `deinterleave`).

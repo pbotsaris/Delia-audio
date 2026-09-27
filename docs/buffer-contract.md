@@ -8,7 +8,7 @@ implementation. It uses older names (`BlockError`, `block()`, `slot()`); the cod
 
 | File | Contents |
 |---|---|
-| `buffer.zig` | public surface, `ProcessContext`, tests. The only file other modules import |
+| `buffer.zig` | public surface and tests. The only file other modules import |
 | `block.zig` | `AudioBlock`, `ConstAudioBlock` |
 | `storage.zig` | `OwnedAudioBuffer`, `AudioBufferPool` |
 | `ops.zig` | `clear`, `copy`, `accumulate`, `interleave`, `deinterleave`, `blocksOverlap` |
@@ -135,11 +135,15 @@ for it.
 ## 8. Node I/O
 
 ```text
-ProcessContext(T)
+Node(T).ProcessContext                        defined in src/graph/nodes/node.zig
     inputs       []const ConstAudioBlock(T)    one block per input port
     outputs      []const AudioBlock(T)         one block per output port
     frame_count  usize
 ```
+
+The type lives with the node contract, not here: `core/buffer` knows nothing about nodes. The
+rules below are what the buffer layer promises to a node; `docs/graph-contract.md` covers the
+rest of the node interface.
 
 - Every block in one call has `frame_count == ctx.frame_count`, and
   `frame_count <= max block size` declared at preparation.
@@ -170,15 +174,17 @@ ProcessContext(T)
 - [x] writes confined to active frames (sentinel in padding and in frames past `frame_count`)
 - [x] owner `init` cleans up under allocation failure (`std.testing.checkAllAllocationFailures`)
 - [x] a node processes a partial block through separate input and output without touching its input
+      (moved to `src/graph/nodes/node.zig` with `ProcessContext`)
 
 ## 10. Open questions
 
 Revisit when the first real consumer needs an answer, not before.
 
-- Does any node need ports with different channel counts in one pool? The pool is uniform for
-  now; a second pool per channel count is the simplest extension.
-- Should render-path operations keep returning errors once the graph compiler validates shapes
-  at preparation, or switch to asserts? Errors for now: the checks are O(channels²) per block,
-  not per sample.
+- ~~Does any node need ports with different channel counts in one pool?~~ Closed by
+  `docs/graph-contract.md` section 2: every port carries the graph's channel count, the pool
+  stays uniform.
+- ~~Should render-path operations keep returning errors once the graph compiler validates shapes
+  at preparation?~~ Closed by `docs/graph-contract.md` section 5: ops keep their errors,
+  `ExecutionPlan.render` discharges them once after its entry check.
 - Strided and interleaved *views* (as opposed to conversion functions) for device adapters:
   add only if M4 shows a copy that matters.
