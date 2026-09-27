@@ -83,8 +83,7 @@ fn vectorizedSineWave(_: std.mem.Allocator) void {
     _ = sine;
 }
 
-pub fn main() !void {
-    const stdout = std.io.getStdOut().writer();
+pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
     var bench = zbench.Benchmark.init(allocator, .{});
@@ -96,5 +95,5 @@ pub fn main() !void {
     try bench.add("sin", sineWave, .{});
     try bench.add("sin smpl by smpl", sineWaveSampleBySample, .{});
     try bench.add("vec sine", vectorizedSineWave, .{});
-    try bench.run(stdout);
+    try bench.run(init.io, std.Io.File.stdout());
 }

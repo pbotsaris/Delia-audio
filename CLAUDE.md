@@ -17,7 +17,7 @@ Delia is a Zig DSP library and realtime audio runtime, built as a learning proje
 
 ## Toolchain
 
-Target is **Zig 0.16.0** (the system compiler). `build.zig` and `build.zig.zon` are already on 0.16; the source is mid-migration from 0.13 and does not compile yet. `docs/ZIG_016_MIGRATION.md` is the step-by-step plan and progress log (build files done; next: delete JACK and dead scratch files, then `common` → `dsp` → `graph` → `backends/alsa` → entry points). Do not pin or install 0.13; write all new code against 0.16 std (unmanaged `ArrayList`, `std.Io` writers, `{f}` custom formatters, `callconv(.c)`, lowercase `@typeInfo` tags, `DebugAllocator`).
+Target is **Zig 0.16.0** (the system compiler). The migration from 0.13 is complete for everything `zig build` compiles (`docs/ZIG_016_MIGRATION.md` is the log); only `src/python.zig` is still on 0.13 syntax. Do not pin or install 0.13; write all new code against 0.16 std (unmanaged `ArrayList`, `std.Io` writers, `{f}` custom formatters, `callconv(.c)`, lowercase `@typeInfo` tags, `DebugAllocator`).
 
 **JACK has been removed** (`src/backends/jack/`, the `vendor/jack` submodule, the JACK detection in `build.zig`). Do not reintroduce it; the last JACK code is in git history before the `remove jack backend` commit.
 
@@ -36,7 +36,7 @@ zig build bench                    # zbench microbenchmarks in src/benchmarks.zi
 
 `run`, `check`, and `test` share one root module (`src/main.zig`) in `build.zig`, so ALSA is wired once. ALSA is linked statically from `vendor/alsa/src/.libs/libasound.a`, built on first `zig build` from the submodule. zBench is pinned to v0.13.0, the last release that targets Zig 0.16.
 
-Tests are aggregated in `src/main.zig` via `refAllDeclsRecursive` over `backends`, `dsp`, and `graph`. Consequences: a file only gets tested if it is reachable from those aggregators (`src/dsp/dsp.zig`, `src/graph/graph.zig`, `src/backends/backends.zig`), and every reachable declaration must compile even if unused. `src/temp.zig`, `src/backends/alsa/ref_deleme.zig`, `src/backends/alsa/audio_loop.zig` (imports a nonexistent `device.zig`) and the empty `src/graph/audio_graph.zig` are unreachable scratch files.
+Tests are aggregated through explicit `test { _ = module; }` blocks: `src/main.zig` references the aggregators (`src/dsp/dsp.zig`, `src/graph/graph.zig`, `src/graph/nodes/nodes.zig`, `src/backends/backends.zig`, `src/backends/alsa/alsa.zig`), and each aggregator references its files. 0.16 has no `refAllDeclsRecursive`, so a new file only gets tested once it is added to its aggregator's `test` block. Function bodies are analysed lazily: code that no test or entry point calls is not compiled. `main.zig` uses `std.testing.refAllDecls` on the example namespaces to keep them compiling. `src/dsp/filters/` is not wired into `dsp.zig` yet.
 
 Run a single file's tests directly. Pure Zig files need nothing extra:
 

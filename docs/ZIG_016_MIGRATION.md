@@ -20,6 +20,12 @@ Baseline: last successful build was Zig 0.13.0 (`zig-out/bin/audio_engine_proto`
 - `zig test <file>` for files with no `../` imports (`common/`, `dsp/filters/iir.zig`, `graph/bitmap.zig`, `logging.zig`). A file with parent-directory imports must be tested through a root under `src/` (or `zig build test` once Step 1 lands), because `zig test` makes the given file the module root.
 - `zig build check` once Step 1 is done; it is what zls build-on-save uses.
 
+## Status (26 Sep 2026)
+
+Steps 1–8 are done on branch `zig-0.16`: `zig build check`, `zig build test` (114 tests), `zig build bench` and `zig build run` all succeed on 0.16.0. Step 9 (`python.zig`) is not started. The hardware check (`playbackSineWave` producing audio) has not been run.
+
+Corrections found while doing the work are marked **Correction** below.
+
 ## Order of work
 
 Do it bottom-up so each layer's tests pass before the next layer is touched. Commit after each step.
@@ -98,7 +104,9 @@ try l.resize(n);                                 try l.resize(allocator, n);
 l.pop()   // returns T                           l.pop()   // returns ?T
 ```
 
-`TopologyQueue.analyzeBufferRequirementsAlloc` uses `free_buffers.pop()` inside an `if (len > 0)`; it now needs `.?` or a `while (free_buffers.pop()) |idx|` restructure. `std.ArrayListUnmanaged` is an alias and still works, so mechanically replacing `ArrayList(T).init(a)` with `ArrayListUnmanaged(T){}` is an acceptable intermediate step; rename to `ArrayList` at the end.
+**Correction:** `TopologyQueue.analyzeBufferRequirementsAlloc` needed no change at its `free_buffers.pop()`: the destination field is `?usize`, so the `?T` return assigns directly.
+
+`SupportedSettings` had no allocator and a by-value `deinit`; it is now `deinit(self: *SupportedSettings, allocator)`, and `AudioCardInfo.deinit` takes `*AudioCardInfo`. `std.ArrayListUnmanaged` is an alias and still works, so mechanically replacing `ArrayList(T).init(a)` with `ArrayListUnmanaged(T){}` is an acceptable intermediate step; rename to `ArrayList` at the end.
 
 ### `@typeInfo` tags are lowercase (17 sites)
 
@@ -117,7 +125,9 @@ pub fn format(self: Self, writer: *std.Io.Writer) std.Io.Writer.Error!void { ...
 // callers: log.info("{f}", .{hardware});   not {any} or {s}
 ```
 
-Inside, `writer.print(...)`, `writer.writeAll(...)` are unchanged. Enum tags print with `{t}` instead of `@tagName(x)` + `{s}`.
+Inside, `writer.print(...)`, `writer.writeAll(...)` are unchanged. Enum tags print with `{t}` instead of `@tagName(x)` + `{s}` (the old form still compiles and was left alone).
+
+**Correction:** `{}` and `{any}` on a type with a `format` method compile but print a field dump instead of calling `format`; `{s}` and `{d}` on such a type are compile errors. `{!}` on a caught error value is also a compile error; those sites now use `{t}`.
 
 ### Allocators (20 sites)
 
@@ -133,11 +143,11 @@ Inside, `writer.print(...)`, `writer.writeAll(...)` are unchanged. Enum tags pri
 
 ### Sleeping (`driver.zig`, 2 sites via `std.time.sleep`)
 
-There is no `std.time.sleep` or `std.Thread.sleep`. Sleeping goes through an `Io`: `std.Io.sleep(io, duration, clock)`. The ALSA driver has no `Io` in scope; for xrun/suspend backoff use `std.posix.nanosleep(secs, nanos)` or `std.c.usleep` via the existing libc link, which keeps the driver free of the `Io` plumbing until the realtime layer decides how it wants it.
+There is no `std.time.sleep` or `std.Thread.sleep`. Sleeping goes through an `Io`: `std.Io.sleep(io, duration, clock)`. The ALSA driver has no `Io` in scope. **Correction:** `std.posix.nanosleep` and `std.c.usleep` do not exist in 0.16 either. The driver uses `sleepNs` in `backends/alsa/utils.zig`, built on `std.c.nanosleep` via the existing libc link, which keeps it free of the `Io` plumbing until the realtime layer decides how it wants it.
 
 ### Files and writers (`graph.zig:debugGraph`, `benchmarks.zig`)
 
-`std.fs.cwd().createFile(path, .{})` now needs an `Io` (`std.Io.Dir.cwd().createFile(io, path, .{})`) and `file.writer()` needs `(io, &buffer)`. `debugGraph` is a debugging aid; give it an `io: std.Io` parameter and take it from `std.testing.io` in tests. `benchmarks.zig` gets `io` from `main(init: std.process.Init)` (`init.io`) and writes through `std.Io.File.stdout().writer(io, &buf)` with an explicit `flush()`.
+`std.fs.cwd().createFile(path, .{})` now needs an `Io` (`std.Io.Dir.cwd().createFile(io, path, .{})`) and `file.writer()` needs `(io, &buffer)`. `debugGraph` is a debugging aid; give it an `io: std.Io` parameter and take it from `std.testing.io` in tests. `benchmarks.zig` gets `io` from `main(init: std.process.Init)` (`init.io`). **Correction:** zBench v0.13.0 takes the file itself, `bench.run(init.io, std.Io.File.stdout())`; no writer or `flush()`.
 
 ### Entry points (`main.zig`, `benchmarks.zig`)
 
@@ -145,13 +155,17 @@ There is no `std.time.sleep` or `std.Thread.sleep`. Sleeping goes through an `Io
 
 ### Test aggregation (`main.zig`)
 
-`std.testing.refAllDeclsRecursive` no longer exists. Replace with explicit `std.testing.refAllDecls` per module in the aggregator files (`dsp.zig`, `graph.zig`, `alsa.zig`), or `comptime { _ = @import(...); }` blocks. Note `refAllDecls` is not recursive: nested types must be listed explicitly or referenced from a test.
+`std.testing.refAllDeclsRecursive` no longer exists. Done with `test { _ = module; }` blocks in each aggregator (`main.zig`, `dsp.zig`, `graph.zig`, `nodes.zig`, `backends.zig`, `alsa.zig`). Note `refAllDecls` is not recursive: nested types must be listed explicitly or referenced from a test.
 
 ### `callconv(.C)` → `callconv(.c)` (11 sites, all in `python.zig`)
 
 ### Misc, one-offs
 
-- `backends/alsa/audio_data.zig:19,26`: a field and a decl are both named `T`; 0.16 rejects the shadowing. Rename the decl.
+- `backends/alsa/audio_data.zig:19,26`: a field and a decl are both named `T`; 0.16 rejects the shadowing. The unused `comptime T` field was deleted.
+- `driver.zig`: `snd_pcm_mmap_begin` now translates its `areas` parameter as `[*c][*c]const`, so the area pointers are `?*const snd_pcm_channel_area_t`.
+- `dsp/analysis.zig` and `dsp/transforms.zig`: the `[N]u8` scratch buffers behind `FixedBufferAllocator` relied on the buffer happening to be aligned for `T`; under 0.16 the STFT test failed with `OutOfMemory`. Both now declare `align(@alignOf(T))`.
+- `driver.zig:1323` and `examples.zig:76` looped `for (n)` over an integer (never analysed before); now `for (0..n)`.
+- Not fixed, pre-existing: `src/examples.zig` `Example.deinit` calls `device.deinit()` twice; `dsp/utils.zig:26,79` call `std.math.pow` without the type argument in functions nothing calls; `dsp/filters/iir.zig` is unfinished and unreachable.
 - `src/utils/utils.zig`, `dsp/analysis.zig`, `dsp/test_data.zig`: no first-pass errors, but re-check after `format` changes.
 - `@cImport` still works in 0.16 (the ALSA probe translated `asoundlib.h` fine).
 - `std.math.Complex`, `std.atomic.Value`, `std.MultiArrayList`, `std.mem.span`, `@Vector`, `std.debug.print`: unchanged.

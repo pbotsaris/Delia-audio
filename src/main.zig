@@ -6,7 +6,7 @@ const ex = @import("examples.zig");
 
 const backends = @import("backends/backends.zig");
 
-pub const std_options = .{
+pub const std_options: std.Options = .{
     .log_level = .debug,
     .logFn = @import("logging.zig").logFn,
 };
@@ -40,7 +40,14 @@ pub fn main() !void {
 }
 
 test {
-    std.testing.refAllDeclsRecursive(backends);
-    std.testing.refAllDeclsRecursive(dsp);
-    std.testing.refAllDeclsRecursive(graph);
+    _ = backends;
+    _ = dsp;
+    _ = graph;
+    _ = audio_specs;
+    _ = @import("common/audio_buffer.zig");
+    _ = @import("utils/utils.zig");
+
+    // examples have no tests; reference them so they keep compiling
+    std.testing.refAllDecls(backends.alsa.examples);
+    std.testing.refAllDecls(ex.Example);
 }

@@ -4,3 +4,13 @@ benchmark              runs     total time     time/run (avg ± σ)     (min ...
 fft power-of-2         1023     1.064s         1.04ms ± 9.266us       (1.032ms ... 1.262ms)        1.041ms    1.065ms    1.067ms
 fft non power-of-2     127      1.922s         15.134ms ± 50.952us    (15.078ms ... 15.367ms)      15.146ms   15.328ms   15.367ms
 fft static             1023     1.075s         1.051ms ± 6.094us      (1.041ms ... 1.16ms)         1.053ms    1.075ms    1.078ms
+
+@ 26-09-26 zig 0.16.0, Debug (zig build bench), after 0.16 migration
+benchmark            runs     total time     time/run (avg ± σ)    (min ... max)                p75        p99        p995      
+---------------------------------------------------------------------------------------------------------------------------------
+fft power-of-2       1649     1.99s          1.207ms ± 16.912us    (1.193ms ... 1.514ms)        1.216ms    1.25ms     1.258ms    
+fft non power-of-2   109      1.984s         18.209ms ± 70.816us   (18.137ms ... 18.514ms)      18.239ms   18.46ms    18.514ms   
+fft static           1579     1.999s         1.266ms ± 11.914us    (1.252ms ... 1.356ms)        1.268ms    1.307ms    1.319ms    
+sin                  100000   1.323s         13.239us ± 326ns      (12.967us ... 46.186us)      13.257us   14.24us    14.422us   
+sin smpl by smpl     100000   1.23s          12.303us ± 420ns      (12.051us ... 128.555us)     12.318us   13.299us   13.462us   
+vec sine             65518    1.989s         30.359us ± 1.643us    (29.985us ... 256.575us)     30.628us   31.644us   31.898us   

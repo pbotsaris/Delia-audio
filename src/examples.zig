@@ -4,7 +4,7 @@ const graph = @import("graph/graph.zig");
 const specs = @import("common/audio_specs.zig");
 const alsa = @import("backends/backends.zig").alsa;
 
-pub const std_options = .{
+pub const std_options: std.Options = .{
     .log_level = .debug,
     .logFn = @import("logging.zig").logFn,
 };
@@ -73,9 +73,9 @@ pub const Example = struct {
         // could do extra checks between buffer size and process block size
         const iterations = @divFloor(buffer_size, process_block_size);
 
-        for (iterations) |_| {
+        for (0..iterations) |_| {
             ctx.scheduler.processGraph() catch |err| {
-                log.err("Failed to process data: {!}", .{err});
+                log.err("Failed to process data: {t}", .{err});
                 return;
             };
 
@@ -86,7 +86,7 @@ pub const Example = struct {
             };
 
             data.write(audio_buffer.buffer) catch |err| {
-                log.err("Failed to write data: {!}", .{err});
+                log.err("Failed to write data: {t}", .{err});
                 return;
             };
 
