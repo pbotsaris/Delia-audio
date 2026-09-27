@@ -13,7 +13,6 @@ pub fn logFn(
         .main,
         .alsa,
         .dsp,
-        .jack,
         .graph,
         std.log.default_log_scope,
         => @tagName(scope),

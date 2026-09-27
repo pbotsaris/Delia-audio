@@ -6,8 +6,6 @@ const ex = @import("examples.zig");
 
 const backends = @import("backends/backends.zig");
 
-const audio_backend = @import("audio_backend");
-
 pub const std_options = .{
     .log_level = .debug,
     .logFn = @import("logging.zig").logFn,
@@ -25,8 +23,6 @@ const log = std.log.scoped(.main);
 //     try e.deinit();
 // }
 pub fn main() !void {
-    backends.jack.examples.testJack();
-
     //    examplePlaybackAndGraph() catch |err| {
     //        log.err("Failed to run example: {!}", .{err});
     //    };
@@ -41,8 +37,6 @@ pub fn main() !void {
     // backends.alsa.examples.playbackSineWave();
 
     // backends.alsa.examples.usingHardwareToInitDevice();
-    // std.debug.print("audio_backend: {any}\n", .{audio_backend.audio_backend});
-
 }
 
 test {
