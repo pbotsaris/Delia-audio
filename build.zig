@@ -54,8 +54,8 @@ pub fn build(b: *std.Build) void {
     Alsa.link(b, root);
 
     ////////////////////////// BUILD / RUN ///////////////////////////////////////
-
     const exe = b.addExecutable(.{
+
         .name = "delia",
         .root_module = root,
     });
