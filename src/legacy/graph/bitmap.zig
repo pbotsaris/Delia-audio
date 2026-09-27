@@ -4,9 +4,9 @@ pub const BitMapError = error{OutOfBounds};
 
 pub fn StaticBitMap(comptime n_bits: usize) type {
     return struct {
-        const Self = @This();
         core: BitMapCore([n_bits]u1),
 
+        const Self = @This();
         pub fn init() Self {
             return .{ .core = .{ .bits = .{0} ** n_bits } };
         }

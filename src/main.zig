@@ -6,6 +6,7 @@ const ex = @import("examples.zig");
 
 const backends = @import("backends/backends.zig");
 
+
 pub const std_options: std.Options = .{
     .log_level = .debug,
     .logFn = @import("logging.zig").logFn,
@@ -43,10 +44,12 @@ test {
     _ = backends;
     _ = dsp;
     _ = graph;
+    _ = @import("legacy/graph/graph.zig"); // old scheduler; examples.zig uses it until M4
     _ = audio_specs;
     _ = @import("common/audio_buffer.zig");
     _ = @import("core/buffer/buffer.zig");
     _ = @import("utils/utils.zig");
+    _ = @import("graph/graph.zig");
 
     // examples have no tests; reference them so they keep compiling
     std.testing.refAllDecls(backends.alsa.examples);

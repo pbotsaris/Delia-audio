@@ -1,6 +1,6 @@
 const std = @import("std");
 const dsp = @import("dsp/dsp.zig");
-const graph = @import("graph/graph.zig");
+const graph = @import("legacy/graph/graph.zig");
 const specs = @import("common/audio_specs.zig");
 const alsa = @import("backends/backends.zig").alsa;
 

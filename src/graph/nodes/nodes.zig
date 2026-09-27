@@ -1,9 +1,7 @@
-pub const utils = @import("util_nodes.zig");
-pub const wave = @import("wave_nodes.zig");
-pub const interface = @import("node_interface.zig");
+pub const Oscillator = @import("oscillator.zig").Oscillator;
+pub const Gain = @import("gain.zig").Gain;
 
 test {
-    _ = utils;
-    _ = wave;
-    _ = interface;
+    _ = @import("oscillator.zig");
+    _ = @import("gain.zig");
 }

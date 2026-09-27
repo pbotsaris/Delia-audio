@@ -1,5 +1,5 @@
 const node_interface = @import("node_interface.zig");
-const dsp = @import("../../dsp/dsp.zig");
+const dsp = @import("../../../dsp/dsp.zig");
 
 pub fn SineNode(comptime T: type) type {
     const GenericNode = node_interface.GenericNode(T);

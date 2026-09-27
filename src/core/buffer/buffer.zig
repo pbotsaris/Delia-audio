@@ -16,6 +16,7 @@ pub const AudioBufferPool = storage.AudioBufferPool;
 pub const AudioBufferError = shape.AudioBufferError;
 pub const Shape = shape.Shape;
 pub const storage_alignment = shape.storage_alignment;
+pub const requireFloat = shape.requireFloat;
 
 pub const blocksOverlap = ops.blocksOverlap;
 pub const clear = ops.clear;
@@ -23,15 +24,6 @@ pub const copy = ops.copy;
 pub const accumulate = ops.accumulate;
 pub const interleave = ops.interleave;
 pub const deinterleave = ops.deinterleave;
-
-
-pub fn ProcessContext(comptime T: type) type {
-    return struct {
-        inputs: []const ConstAudioBlock(T),
-        outputs: []const AudioBlock(T),
-        frame_count: usize,
-    };
-}
 
 test {
     _ = audio_block;
@@ -372,69 +364,4 @@ test "operations write only active frames" {
             try expectAll(f32, 9, channel_storage[5..]);
         }
     }
-}
-
-const TestGain = struct {
-    gain: f32,
-
-    fn process(self: *TestGain, ctx: ProcessContext(f32)) void {
-        const in = ctx.inputs[0];
-        const out = ctx.outputs[0];
-
-        for (0..out.channel_count) |ch| {
-            for (out.channel(ch), in.channel(ch)) |*o, i| o.* = i * self.gain;
-        }
-    }
-};
-
-const TestConstant = struct {
-    value: f32,
-
-    fn process(self: *TestConstant, ctx: ProcessContext(f32)) void {
-        for (ctx.outputs) |out| {
-            for (0..out.channel_count) |ch| @memset(out.channel(ch), self.value);
-        }
-    }
-};
-
-test "ProcessContext - node with separate input and output over a partial block" {
-    var pool = try AudioBufferPool(f32).init(testing.allocator, .{ .slot_count = 2, .channel_count = 2, .max_frames = 16 });
-    defer pool.deinit(testing.allocator);
-
-    // sentinel over the full capacity of the output, then process only 5 frames
-    const full_out = try pool.borrowSlot(1, 16);
-    for (0..2) |ch| @memset(full_out.channel(ch), 9);
-
-    const in = try pool.borrowSlot(0, 5);
-    const out = try pool.borrowSlot(1, 5);
-    for (0..2) |ch| @memset(in.channel(ch), 1);
-
-    var gain = TestGain{ .gain = 0.5 };
-    gain.process(.{
-        .inputs = &.{in.asConst()},
-        .outputs = &.{out},
-        .frame_count = 5,
-    });
-
-    for (0..2) |ch| {
-        try expectAll(f32, 0.5, full_out.channel(ch)[0..5]);
-        try expectAll(f32, 9, full_out.channel(ch)[5..]);
-        try expectAll(f32, 1, in.channel(ch));
-    }
-}
-
-test "ProcessContext - source node has zero inputs" {
-    var owned = try OwnedAudioBuffer(f32).init(testing.allocator, 2, 8);
-    defer owned.deinit(testing.allocator);
-
-    const out = try owned.borrowBlock(8);
-
-    var source = TestConstant{ .value = 0.25 };
-    source.process(.{
-        .inputs = &.{},
-        .outputs = &.{out},
-        .frame_count = 8,
-    });
-
-    for (0..2) |ch| try expectAll(f32, 0.25, out.channel(ch));
 }
