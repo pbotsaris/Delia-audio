@@ -22,7 +22,7 @@ Baseline: last successful build was Zig 0.13.0 (`zig-out/bin/audio_engine_proto`
 
 ## Status (26 Sep 2026)
 
-Steps 1–8 are done on branch `zig-0.16`: `zig build check`, `zig build test` (114 tests), `zig build bench` and `zig build run` all succeed on 0.16.0. Step 9 (`python.zig`) is not started. The hardware check (`playbackSineWave` producing audio) has not been run.
+Steps 1–8 are done on branch `zig-0.16`: `zig build check`, `zig build test` (114 tests), `zig build bench` and `zig build run` all succeed on 0.16.0. Step 9 (`python.zig`) is done: it builds through `pydelia-build/setup.py` (ReleaseFast) and all eleven bindings were exercised from the `audio_engine` conda env. The hardware check (`playbackSineWave` producing audio) has not been run.
 
 Corrections found while doing the work are marked **Correction** below.
 
@@ -170,7 +170,15 @@ There is no `std.time.sleep` or `std.Thread.sleep`. Sleeping goes through an `Io
 - `@cImport` still works in 0.16 (the ALSA probe translated `asoundlib.h` fine).
 - `std.math.Complex`, `std.atomic.Value`, `std.MultiArrayList`, `std.mem.span`, `@Vector`, `std.debug.print`: unchanged.
 
-## Step 9: `python.zig`
+## Step 9: `python.zig` — DONE (26 Sep 2026)
+
+Applied: `callconv(.c)` ×11, `DebugAllocator` ×6, typed `std_options`, `@cInclude("Python.h")` with the include path from `builder.py`.
+
+**Correction:** the `PyMethodDef` table had no terminating null entry. The ReleaseFast build segfaulted at import under 0.16; a zeroed sentinel entry was added.
+
+Not fixed, pre-existing: `fftConvolve` never frees its two input buffers or the result list, so the allocator reports a leak on every call.
+
+Original notes:
 
 Not part of `zig build`; built by `pydelia-build/builder.py` with `zig build-lib`. Changes: `callconv(.c)` ×11, `DebugAllocator` ×6, `std_options` type. The hardcoded conda include path (`/home/pedro/.conda/envs/audio_engine/include/python3.12/Python.h`) should become an `-I` flag from `builder.py`. Decide whether to keep the bindings at all before spending time here; the plan's analysis layer may supersede them.
 

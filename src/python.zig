@@ -4,7 +4,7 @@
 /// Note that this is not optmized for performance, as it is intended for testing during development.
 const py = @cImport({
     @cDefine("PY_SSIZE_T_CLEAN", {});
-    @cInclude("/home/pedro/.conda/envs/audio_engine/include/python3.12/Python.h");
+    @cInclude("Python.h");
 });
 
 const std = @import("std");
@@ -14,14 +14,14 @@ const dsp = @import("dsp/dsp.zig");
 const T: type = f64;
 var zero: usize = 0;
 
-pub const std_options = .{
+pub const std_options: std.Options = .{
     .log_level = .err,
     .logFn = @import("logging.zig").logFn,
 };
 
 const log = std.log.scoped(.delia);
 
-fn magnitude(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*]py.PyObject {
+fn magnitude(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.c) [*]py.PyObject {
     _ = self;
 
     const pylist: [*c]py.PyObject = parseArgument(args, "O") //
@@ -52,7 +52,7 @@ fn magnitude(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*]py.Py
     return pylist_result;
 }
 
-fn decibelFromMagnitude(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObject {
+fn decibelFromMagnitude(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.c) [*c]py.PyObject {
     _ = self;
 
     var pylist: [*c]py.PyObject = null;
@@ -101,7 +101,7 @@ fn decibelFromMagnitude(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.
     return py_result;
 }
 
-fn phase(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObject {
+fn phase(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.c) [*c]py.PyObject {
     _ = self;
 
     const pylist = parseArgument(args, "O") orelse return @as([*c]py.PyObject, (@ptrFromInt(zero)));
@@ -131,10 +131,10 @@ fn phase(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObj
     return pylist_result;
 }
 
-fn sineWave(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObject {
+fn sineWave(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.c) [*c]py.PyObject {
     _ = self;
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() == .leak) log.err("Memory leak detected", .{});
 
     var freq: u32 = undefined;
@@ -176,7 +176,7 @@ fn sineWave(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.Py
 
 // FFT and IFFT in the heap as we are not too worried about speed when testing in in Python
 
-fn fft(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*]py.PyObject {
+fn fft(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.c) [*]py.PyObject {
     _ = self;
 
     const pylist: [*c]py.PyObject = parseArgument(args, "O") //
@@ -189,7 +189,7 @@ fn fft(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*]py.PyObject
         return handleError(pylist_result, "Failed to create result list.");
     }
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() == .leak) log.err("Memory leak detected", .{});
 
     const allocator = gpa.allocator();
@@ -226,7 +226,7 @@ fn fft(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*]py.PyObject
     return pylist_result;
 }
 
-fn ifft(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObject {
+fn ifft(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.c) [*c]py.PyObject {
     _ = self;
 
     const pylist: [*c]py.PyObject = parseArgument(args, "O") orelse return @as([*c]py.PyObject, (@ptrFromInt(zero)));
@@ -238,7 +238,7 @@ fn ifft(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObje
         return handleError(pylist_result, "Failed to create result list.");
     }
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() == .leak) log.err("Memory leak detected", .{});
 
     const allocator = gpa.allocator();
@@ -282,7 +282,7 @@ fn ifft(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObje
     return pylist_result;
 }
 
-fn stft(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObject {
+fn stft(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.c) [*c]py.PyObject {
     _ = self;
 
     var pylist: [*c]py.PyObject = null;
@@ -318,7 +318,7 @@ fn stft(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObje
         return handleError(null, "Window size must be less than the size of the input list.");
     }
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() == .leak) log.err("Memory leak detected", .{});
 
     const allocator = gpa.allocator();
@@ -393,7 +393,7 @@ fn stft(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObje
     return pylist_result;
 }
 
-fn fftConvolve(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObject {
+fn fftConvolve(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.c) [*c]py.PyObject {
     _ = self;
 
     var apylist: [*c]py.PyObject = null;
@@ -418,7 +418,7 @@ fn fftConvolve(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py
         return handleError(pylist_result, "Failed to create result list.");
     }
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() == .leak) log.err("Memory leak detected", .{});
 
     const transform = dsp.transforms.FourierDynamic(T);
@@ -462,7 +462,7 @@ fn fftConvolve(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py
     return pylist_result;
 }
 
-fn fftFrequencies(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObject {
+fn fftFrequencies(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.c) [*c]py.PyObject {
     _ = self;
 
     var n: T = undefined;
@@ -474,7 +474,7 @@ fn fftFrequencies(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c
     }
 
     // heap allocation as speed does not matter here
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() == .leak) log.err("Memory leak detected", .{});
     const allocator = gpa.allocator();
     const utils = dsp.utils.Utils(T);
@@ -499,11 +499,11 @@ fn fftFrequencies(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c
     return outlist;
 }
 
-fn hanning(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObject {
+fn hanning(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.c) [*c]py.PyObject {
     return windowFunction(self, args, .hann);
 }
 
-fn blackman(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.C) [*c]py.PyObject {
+fn blackman(self: [*c]py.PyObject, args: [*c]py.PyObject) callconv(.c) [*c]py.PyObject {
     return windowFunction(self, args, .blackman);
 }
 
@@ -644,6 +644,8 @@ var methods = [_]py.PyMethodDef{
         .ml_flags = py.METH_VARARGS,
         .ml_doc = "stft(data: List[float], window_size: int, hop_size: int) -> List[List[complex]]\n--\n\nPerform a Short Time Fourier Transform on the input data.",
     },
+    // sentinel: CPython reads the table until it finds a null ml_name
+    std.mem.zeroes(py.PyMethodDef),
 };
 
 var module = py.PyModuleDef{

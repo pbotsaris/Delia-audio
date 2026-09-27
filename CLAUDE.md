@@ -17,7 +17,7 @@ Delia is a Zig DSP library and realtime audio runtime, built as a learning proje
 
 ## Toolchain
 
-Target is **Zig 0.16.0** (the system compiler). The migration from 0.13 is complete for everything `zig build` compiles (`docs/ZIG_016_MIGRATION.md` is the log); only `src/python.zig` is still on 0.13 syntax. Do not pin or install 0.13; write all new code against 0.16 std (unmanaged `ArrayList`, `std.Io` writers, `{f}` custom formatters, `callconv(.c)`, lowercase `@typeInfo` tags, `DebugAllocator`).
+Target is **Zig 0.16.0** (the system compiler). The migration from 0.13 is complete, including `src/python.zig` (`docs/ZIG_016_MIGRATION.md` is the log). Do not pin or install 0.13; write all new code against 0.16 std (unmanaged `ArrayList`, `std.Io` writers, `{f}` custom formatters, `callconv(.c)`, lowercase `@typeInfo` tags, `DebugAllocator`).
 
 **JACK has been removed** (`src/backends/jack/`, the `vendor/jack` submodule, the JACK detection in `build.zig`). Do not reintroduce it; the last JACK code is in git history before the `remove jack backend` commit.
 
@@ -57,7 +57,7 @@ zig test src/backends/alsa/driver.zig -I vendor/alsa/include vendor/alsa/src/.li
 
 ### Python bindings
 
-`pydelia-build/` builds `src/python.zig` into a CPython extension with `zig build-lib` (see `builder.py`). `src/python.zig` hardcodes a conda include path for `Python.h` and uses `f64` throughout; it is a testing/visualization surface for the notebooks in `notebooks/`, not a performance path.
+`pydelia-build/` builds `src/python.zig` into a CPython extension with `zig build-lib` (see `builder.py`). `src/python.zig` includes `Python.h` by name; the include path comes from the `-I` flags `builder.py` passes (setuptools adds the active interpreter's include dir), so build it from the Python env you will import it in: `cd pydelia-build && python setup.py build_ext --inplace`. It is not part of `zig build` or `zig build test`. It uses `f64` throughout; it is a testing/visualization surface for the notebooks in `notebooks/`, not a performance path.
 
 ## Architecture
 
