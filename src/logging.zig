@@ -3,7 +3,7 @@ const ANSI = @import("ansi.zig");
 
 pub fn logFn(
     comptime level: std.log.Level,
-    comptime scope: @TypeOf(.EnumLiteral),
+    comptime scope: @EnumLiteral(),
     comptime format: []const u8,
     args: anytype,
 ) void {
@@ -24,8 +24,8 @@ pub fn logFn(
 
     const prefix = "[" ++ comptime level.asText() ++ "] " ++ scope_prefix;
 
-    std.debug.lockStdErr();
-    defer std.debug.unlockStdErr();
-    const stderr = std.io.getStdErr().writer();
-    nosuspend stderr.print(color ++ prefix ++ format ++ ANSI.reset ++ "\n", args) catch return;
+    var buffer: [64]u8 = undefined;
+    const stderr = std.debug.lockStderr(&buffer);
+    defer std.debug.unlockStderr();
+    stderr.file_writer.interface.print(color ++ prefix ++ format ++ ANSI.reset ++ "\n", args) catch return;
 }
