@@ -1,3 +1,5 @@
+// TODO: Do the callback for jack, you have something already in place but you may need to figure out
+
 const jack = @import("jack.zig");
 const std = @import("std");
 
@@ -17,13 +19,13 @@ const Context = struct {
     }
 };
 
-const JackClient = jack.client.JackClient(Context, .{ .duplex_mode = .full_duplex, .log_level = .info });
+const JackClient = jack.client.JackClient(Context, .{ .log_level = .info });
 
 pub fn testJack() void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
-    const allocator = gpa.allocator();
     var context = Context{};
+    const allocator = gpa.allocator();
 
     var client = JackClient.init(allocator, &context, .{
         .client_name = "delia",
@@ -45,9 +47,6 @@ pub fn testJack() void {
     // for (client.hardware.captures) |captures| {
     //     log.info("Capture: {s}", .{captures.name});
     // }
-    // must activate the client before using it, according to jack!
-
-    client.activate() catch return;
 
     // when selecting group of ports, like channels from the same card
     // we can use findPortGroup which will return a list of ports that matches

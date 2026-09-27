@@ -95,10 +95,6 @@ pub fn findPortGroup(self: Self, name: []const u8, port_type: PortType) []JackHa
         right_index += 1;
     }
 
-    if (right_index == ports.len) {
-        right_index = ports.len - 1;
-    }
-
     return ports[left_index..right_index];
 }
 
@@ -160,10 +156,10 @@ fn getPortsAlloc(allocator: std.mem.Allocator, client: *c_jack.jack_client_t, fl
         };
 
         const spanned_port_info = std.mem.span(jack_port_info);
+        const name_buf = try allocator.alloc(u8, spanned_port_info.len);
+        @memcpy(name_buf, spanned_port_info);
 
-        ports[i].name = try allocator.alloc(u8, spanned_port_info.len);
-        @memcpy(ports[i].name, spanned_port_info);
-
+        ports[i].name = name_buf;
         ports[i].ptr = port_ptr;
         ports[i].uuid = c_jack.jack_port_uuid(port_ptr);
         ports[i].type = if (flags == pb_flags) PortType.playback else PortType.capture;

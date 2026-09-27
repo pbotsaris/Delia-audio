@@ -158,11 +158,18 @@ pub fn JackClient(comptime Context: type, comptime comptime_opts: JackComptimeOp
                 maybe_new_name = std.mem.span(new_name);
             }
 
-            const err = c_jack.jack_set_process_callback(client, &Self.processCallback, null);
+            var err = c_jack.jack_set_process_callback(client, &Self.processCallback, null);
 
             if (err != 0) {
                 log.err("Failed to set process callback: {d}", .{err});
                 return JackClientError.failed_set_callback;
+            }
+
+            err = c_jack.jack_activate(client);
+
+            if (err != 0) {
+                log.err("Failed to activate JACK client: {d}", .{err});
+                return JackClientError.failed_activate_client;
             }
 
             return .{
@@ -173,15 +180,6 @@ pub fn JackClient(comptime Context: type, comptime comptime_opts: JackComptimeOp
                 .hardware = try Hardware.init(allocator, client),
                 .context = context,
             };
-        }
-
-        pub fn activate(self: Self) !void {
-            const err = c_jack.jack_activate(self.client);
-
-            if (err != 0) {
-                log.err("Failed to activate JACK client: {d}", .{err});
-                return JackClientError.failed_activate_client;
-            }
         }
 
         pub fn registerPortFor(self: *Self, hardware_port: Hardware.JackHardwarePort) !PortHandler {
@@ -348,7 +346,7 @@ const JackLogLevel = enum {
 };
 
 const JackComptimeOptions = struct {
-    duplex_mode: DuplexMode = DuplexMode.half_duplex,
+    duplex_mode: DuplexMode = DuplexMode.full_duplex,
     log_level: JackLogLevel = JackLogLevel.none,
 };
 
