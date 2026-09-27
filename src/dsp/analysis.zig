@@ -108,7 +108,7 @@ pub fn ShortTimeFourierStatic(comptime T: type, comptime window_size: transforms
             try output.zeros(); // maybe remove to improve performance
 
             // inout is allocated on the stack and reused for each window
-            var list_buf: [win_size * @sizeOf(List.ComplexType) + 1]u8 = undefined;
+            var list_buf: [win_size * @sizeOf(List.ComplexType) + 1]u8 align(@alignOf(T)) = undefined;
             var fba = std.heap.FixedBufferAllocator.init(&list_buf);
             const static_allocator = fba.allocator();
             var inout = try List.init(static_allocator, win_size);

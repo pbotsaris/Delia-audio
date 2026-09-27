@@ -72,7 +72,7 @@ pub fn FourierStatic(comptime T: type, comptime size: WindowSize) type {
         const window_size: usize = @intFromEnum(size);
         const levels: usize = std.math.log2(window_size);
 
-        var internal_buffer: [window_size * @sizeOf(ComplexType)]u8 = undefined;
+        var internal_buffer: [window_size * @sizeOf(ComplexType)]u8 align(@alignOf(T)) = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&internal_buffer);
         const static_allocator = fba.allocator();
 

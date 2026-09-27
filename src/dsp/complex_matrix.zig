@@ -148,7 +148,7 @@ pub fn ComplexMatrix(comptime T: type) type {
 pub fn Matrix(comptime T: type) type {
     const info = @typeInfo(T);
 
-    if (info != .Int and info != .Float) {
+    if (info != .int and info != .float) {
         @compileError("Matrix only supports integer and floating point types");
     }
 
@@ -172,8 +172,8 @@ pub fn Matrix(comptime T: type) type {
 
         pub fn zeros(self: *Self) !void {
             const zero = switch (@typeInfo(T)) {
-                .Int => 0,
-                .Float => 0.0,
+                .int => 0,
+                .float => 0.0,
                 else => MatrixError.unsupported_type,
             };
 
