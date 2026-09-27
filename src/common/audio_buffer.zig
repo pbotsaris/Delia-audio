@@ -21,6 +21,7 @@ pub const ViewsOptions = struct {
 
 pub const ChannelViewError = error{
     invalid_buffer_length,
+    shape_mismatch,
 };
 
 pub fn ChannelView(comptime T: type) type {
@@ -67,6 +68,14 @@ pub fn ChannelView(comptime T: type) type {
         pub inline fn copyFrom(self: Self, other: Self) !void {
             if (self.buffer.len != other.buffer.len) {
                 return ChannelViewError.invalid_buffer_length;
+            }
+
+            // same length is not enough: 2x8 and 4x4 would copy samples into the wrong channels
+            if (self.n_channels != other.n_channels or
+                self.block_size != other.block_size or
+                self.access != other.access)
+            {
+                return ChannelViewError.shape_mismatch;
             }
 
             @memcpy(self.buffer, other.buffer);
@@ -133,6 +142,14 @@ pub fn UnmanagedChannelView(comptime T: type) type {
         pub inline fn copyFrom(self: Self, other: Self) !void {
             if (self.buffer.len != other.buffer.len) {
                 return ChannelViewError.invalid_buffer_length;
+            }
+
+            // same length is not enough: 2x8 and 4x4 would copy samples into the wrong channels
+            if (self.n_channels != other.n_channels or
+                self.block_size != other.block_size or
+                self.access != other.access)
+            {
+                return ChannelViewError.shape_mismatch;
             }
 
             @memcpy(self.buffer, other.buffer);
@@ -322,4 +339,62 @@ test "ChannelView - large non-interleaved buffer" {
             try expectEqual(view.readSample(channel, frame), expected);
         }
     }
+}
+
+test "UnmanagedChannelView - copyFrom rejects a different shape with the same total length" {
+    var dst_samples = [_]f32{0} ** 16;
+    var src_samples = [_]f32{1} ** 16;
+
+    const dst = try UnmanagedChannelView(f32).init(&dst_samples, .{
+        .n_channels = 2,
+        .block_size = .blk_8,
+        .access = .non_interleaved,
+    });
+
+    const other_channels = try UnmanagedChannelView(f32).init(&src_samples, .{
+        .n_channels = 4,
+        .block_size = .blk_4,
+        .access = .non_interleaved,
+    });
+
+    const other_access = try UnmanagedChannelView(f32).init(&src_samples, .{
+        .n_channels = 2,
+        .block_size = .blk_8,
+        .access = .interleaved,
+    });
+
+    try expectError(error.shape_mismatch, dst.copyFrom(other_channels));
+    try expectError(error.shape_mismatch, dst.copyFrom(other_access));
+
+    for (dst_samples) |sample| try expectEqual(0, sample);
+}
+
+test "UnmanagedChannelView - copyFrom copies between views of the same shape" {
+    var dst_samples = [_]f32{0} ** 16;
+    var src_samples = [_]f32{1} ** 16;
+    const opts: ViewOption = .{ .n_channels = 2, .block_size = .blk_8, .access = .non_interleaved };
+
+    const dst = try UnmanagedChannelView(f32).init(&dst_samples, opts);
+    const src = try UnmanagedChannelView(f32).init(&src_samples, opts);
+
+    try dst.copyFrom(src);
+
+    for (dst_samples) |sample| try expectEqual(1, sample);
+}
+
+test "ChannelView - copyFrom rejects a different shape with the same total length" {
+    const allocator = std.testing.allocator;
+
+    var dst = try ChannelView(f32).init(allocator, .{ .n_channels = 2, .block_size = .blk_8, .access = .interleaved });
+    defer dst.deinit();
+
+    var src = try ChannelView(f32).init(allocator, .{ .n_channels = 4, .block_size = .blk_4, .access = .interleaved });
+    defer src.deinit();
+
+    dst.zero();
+    @memset(src.buffer, 1);
+
+    try expectError(error.shape_mismatch, dst.copyFrom(src));
+
+    for (dst.buffer) |sample| try expectEqual(0, sample);
 }

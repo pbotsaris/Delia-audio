@@ -83,7 +83,9 @@ pub fn Graph(comptime T: type) type {
         /// Adds a new node to the graph and returns a handle to it.
         /// The node type must implement the `GenericNode` interface.
         pub fn addNode(self: *Self, node: anytype) !NodeHandle {
-            const generic_node = try GenericNode.createNode(self.allocator, node);
+            var generic_node = try GenericNode.createNode(self.allocator, node);
+            errdefer generic_node.destroy();
+
             const index = self.nodes.items.len;
             try self.nodes.append(self.allocator, generic_node);
 
@@ -235,6 +237,8 @@ pub const TopologyQueue = struct {
     /// Initializes queue with fixed capacity. Cannot be resized.
     pub fn init(allocator: std.mem.Allocator, capacity: usize) !TopologyQueue {
         var nds = std.MultiArrayList(TopologyQueueNode){};
+        errdefer nds.deinit(allocator);
+
         try nds.ensureTotalCapacity(allocator, capacity);
 
         return .{

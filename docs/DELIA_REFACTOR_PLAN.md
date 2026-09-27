@@ -309,6 +309,8 @@ Treat reassociation, fused operations, and approximate math as numerical policy 
 
 The scheduler already prepares nodes and calculates topology/buffer requirements, but `processGraph()` still examines dependency status during execution. Its buffer-reuse branch also deinitializes when capacity is sufficient and returns when it is smaller; this needs a regression test before reuse. [D4]
 
+*Fixed on 27 September 2026 with regression tests in `src/graph/scheduler.zig`. `processGraph()` itself is unchanged.*
+
 Target architecture:
 
 ```text
@@ -582,7 +584,7 @@ Listed in working order (M1, M3, M2, M4).
 - [x] Implement `src/core/buffer/block.zig` (`AudioBlock`, `ConstAudioBlock`) against the contract and add it to a `test` block reachable from `src/main.zig`.
 - [x] Implement `OwnedAudioBuffer` and `AudioBufferPool`, then the block operations (`clear`, `copy`, `accumulate`, `interleave`, `deinterleave`).
 - [x] Add `ProcessContext` with separate inputs and outputs, tested with a gain node and a source node.
-- [ ] Add regression tests for the scheduler's inverted buffer-reuse branch and for mismatched copy shapes in the old views, before the scheduler migrates.
+- [x] Add regression tests for the scheduler's inverted buffer-reuse branch and for mismatched copy shapes in the old views, before the scheduler migrates. Both were fixed: `Scheduler.prepare` builds the new queue and pool before replacing the old ones, and `copyFrom` returns `shape_mismatch`.
 - [ ] Build the offline Sine -> Gain -> Output slice on the new node I/O contract; add fan-out/mixing before optimizing buffer reuse.
 - [ ] Add a regression test for `ComplexList` logical length versus capacity.
 - [ ] Write `docs/fft-contract.md`: direction, normalization, ordering, supported lengths, aliasing, workspace, and ownership.

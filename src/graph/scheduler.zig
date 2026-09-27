@@ -40,35 +40,42 @@ pub fn Scheduler(comptime T: type) type {
             try sine_node.connect(gain_node);
         }
 
+        /// Builds the next plan completely before replacing the current one, so a failure
+        /// leaves the previous queue and pool in place.
         pub fn prepare(self: *Self, ctx: PrepareContext) !void {
             for (self.audio_graph.nodes.items) |*node| {
                 try node.prepare(ctx);
             }
 
             var queue = try self.audio_graph.topologicalSortAlloc(self.allocator);
-
-            if (self.topology_queue) |*q| {
-                q.deinit();
-            }
-
-            self.topology_queue = queue;
+            errdefer queue.deinit();
 
             // assigns buffer index to each node and returns the number of buffers required
             const n_views = try queue.analyzeBufferRequirementsAlloc();
 
-            if (self.buffers) |*buffers| {
-                // we already have enough buffers
-                if (buffers.opts.n_views >= n_views) buffers.deinit()
-                // we have enough buffers
-                else return;
+            if (!self.canReuseBuffers(n_views, ctx)) {
+                const buffers = try audio_buffer.UniformChannelViews(T).init(self.allocator, .{
+                    .n_views = n_views,
+                    .n_channels = ctx.n_channels,
+                    .block_size = ctx.block_size,
+                    .access = ctx.access_pattern,
+                });
+
+                if (self.buffers) |*old| old.deinit();
+                self.buffers = buffers;
             }
 
-            self.buffers = try audio_buffer.UniformChannelViews(T).init(self.allocator, .{
-                .n_views = n_views,
-                .n_channels = ctx.n_channels,
-                .block_size = ctx.block_size,
-                .access = ctx.access_pattern,
-            });
+            if (self.topology_queue) |*old| old.deinit();
+            self.topology_queue = queue;
+        }
+
+        fn canReuseBuffers(self: Self, n_views: usize, ctx: PrepareContext) bool {
+            const buffers = self.buffers orelse return false;
+
+            return buffers.opts.n_views >= n_views and
+                buffers.opts.n_channels == ctx.n_channels and
+                buffers.opts.block_size == ctx.block_size and
+                buffers.opts.access == ctx.access_pattern;
         }
 
         pub fn processGraph(self: *Self) !void {
@@ -181,4 +188,117 @@ pub fn Scheduler(comptime T: type) type {
             }
         }
     };
+}
+
+const testing = std.testing;
+
+const TestScheduler = Scheduler(f32);
+const TestGain = graph.nodes.utils.GainNode(f32);
+
+const test_prepare_ctx: TestScheduler.PrepareContext = .{
+    .block_size = .blk_64,
+    .n_channels = 2,
+    .sample_rate = 48000,
+    .access_pattern = .non_interleaved,
+};
+
+test "Scheduler: prepare reuses the pool when the requirements are unchanged" {
+    var scheduler = TestScheduler.init(testing.allocator);
+    defer scheduler.deinit();
+
+    _ = try scheduler.audio_graph.addNode(TestGain{ .gain = 1 });
+
+    try scheduler.prepare(test_prepare_ctx);
+    const first_pool = scheduler.buffers.?.buffer;
+
+    try scheduler.prepare(test_prepare_ctx);
+    const second_pool = scheduler.buffers.?.buffer;
+
+    try testing.expectEqual(first_pool.ptr, second_pool.ptr);
+    try testing.expectEqual(first_pool.len, second_pool.len);
+}
+
+test "Scheduler: prepare grows the pool when the graph needs more buffers" {
+    var scheduler = TestScheduler.init(testing.allocator);
+    defer scheduler.deinit();
+
+    _ = try scheduler.audio_graph.addNode(TestGain{ .gain = 1 });
+    try scheduler.prepare(test_prepare_ctx);
+    try testing.expectEqual(1, scheduler.buffers.?.opts.n_views);
+
+    // independent nodes cannot share a buffer
+    _ = try scheduler.audio_graph.addNode(TestGain{ .gain = 1 });
+    _ = try scheduler.audio_graph.addNode(TestGain{ .gain = 1 });
+    try scheduler.prepare(test_prepare_ctx);
+
+    try testing.expectEqual(3, scheduler.buffers.?.opts.n_views);
+    try testing.expectEqual(3 * 2 * 64, scheduler.buffers.?.buffer.len);
+
+    // every assigned buffer index must be inside the pool
+    for (scheduler.topology_queue.?.nodes.items(.buffer_index)) |buffer_index| {
+        try testing.expect(buffer_index.? < scheduler.buffers.?.opts.n_views);
+    }
+}
+
+test "Scheduler: prepare rebuilds the pool when channel count, block size or access change" {
+    var scheduler = TestScheduler.init(testing.allocator);
+    defer scheduler.deinit();
+
+    _ = try scheduler.audio_graph.addNode(TestGain{ .gain = 1 });
+    try scheduler.prepare(test_prepare_ctx);
+
+    var ctx = test_prepare_ctx;
+    ctx.n_channels = 4;
+    try scheduler.prepare(ctx);
+    try testing.expectEqual(4, scheduler.buffers.?.opts.n_channels);
+    try testing.expectEqual(4 * 64, scheduler.buffers.?.buffer.len);
+
+    ctx.block_size = .blk_128;
+    try scheduler.prepare(ctx);
+    try testing.expectEqual(128, scheduler.blockSize());
+    try testing.expectEqual(4 * 128, scheduler.buffers.?.buffer.len);
+
+    ctx.access_pattern = .interleaved;
+    try scheduler.prepare(ctx);
+    try testing.expectEqual(.interleaved, scheduler.buffers.?.opts.access);
+
+    const view = scheduler.getOutputBuffer().?;
+    try testing.expectEqual(4, view.n_channels);
+    try testing.expectEqual(128, view.block_size);
+    try testing.expectEqual(.interleaved, view.access);
+}
+
+fn prepareTwice(allocator: std.mem.Allocator) !void {
+    var scheduler = TestScheduler.init(allocator);
+    defer scheduler.deinit();
+
+    _ = try scheduler.audio_graph.addNode(TestGain{ .gain = 1 });
+    try scheduler.prepare(test_prepare_ctx);
+
+    _ = try scheduler.audio_graph.addNode(TestGain{ .gain = 1 });
+    try scheduler.prepare(test_prepare_ctx);
+}
+
+test "Scheduler: a failed prepare leaks nothing and frees nothing twice" {
+    try testing.checkAllAllocationFailures(testing.allocator, prepareTwice, .{});
+}
+
+test "Scheduler: a failed prepare leaves the previous plan usable" {
+    var failing = testing.FailingAllocator.init(testing.allocator, .{});
+    var scheduler = TestScheduler.init(failing.allocator());
+    defer scheduler.deinit();
+
+    _ = try scheduler.audio_graph.addNode(TestGain{ .gain = 1 });
+    try scheduler.prepare(test_prepare_ctx);
+
+    const pool_before = scheduler.buffers.?.buffer;
+    const queue_len_before = scheduler.topology_queue.?.nodes.len;
+
+    _ = try scheduler.audio_graph.addNode(TestGain{ .gain = 1 });
+
+    failing.fail_index = failing.alloc_index;
+    try testing.expectError(error.OutOfMemory, scheduler.prepare(test_prepare_ctx));
+
+    try testing.expectEqual(pool_before.ptr, scheduler.buffers.?.buffer.ptr);
+    try testing.expectEqual(queue_len_before, scheduler.topology_queue.?.nodes.len);
 }
