@@ -14,6 +14,7 @@ Delia is a Zig DSP library and realtime audio runtime, built as a learning proje
 - Initial scope: planar `f32` graph audio, single render thread, acyclic graph, declared max block size, one clock domain. Reject unsupported configs explicitly.
 - Linux backend is direct ALSA. JACK or PipeWire interop is optional future work, not a dependency. A Delia-owned server comes later, on top of the engine.
 - Milestones M0..M7 (baseline, buffer contracts, planned FFT, offline graph slice, backend integration, control/plan replacement, measured optimization, server). The immediate next work is **ownership and execution contracts**, not SIMD.
+- Working order is M1, M3, M2. M0 and M1 are done; the next milestone is M3 (offline graph slice on the new buffer contract).
 
 ## Toolchain
 
@@ -36,7 +37,7 @@ zig build bench                    # zbench microbenchmarks in src/benchmarks.zi
 
 `run`, `check`, and `test` share one root module (`src/main.zig`) in `build.zig`, so ALSA is wired once. ALSA is linked statically from `vendor/alsa/src/.libs/libasound.a`, built on first `zig build` from the submodule. zBench is pinned to v0.13.0, the last release that targets Zig 0.16.
 
-Tests are aggregated through explicit `test { _ = module; }` blocks: `src/main.zig` references the aggregators (`src/dsp/dsp.zig`, `src/graph/graph.zig`, `src/graph/nodes/nodes.zig`, `src/backends/backends.zig`, `src/backends/alsa/alsa.zig`), and each aggregator references its files. 0.16 has no `refAllDeclsRecursive`, so a new file only gets tested once it is added to its aggregator's `test` block. Function bodies are analysed lazily: code that no test or entry point calls is not compiled. `main.zig` uses `std.testing.refAllDecls` on the example namespaces to keep them compiling. `src/dsp/filters/` is not wired into `dsp.zig` yet.
+Tests are aggregated through explicit `test { _ = module; }` blocks: `src/main.zig` references the aggregators (`src/dsp/dsp.zig`, `src/graph/graph.zig`, `src/graph/nodes/nodes.zig`, `src/backends/backends.zig`, `src/backends/alsa/alsa.zig`, `src/core/buffer/buffer.zig`), and each aggregator references its files. 0.16 has no `refAllDeclsRecursive`, so a new file only gets tested once it is added to its aggregator's `test` block. Function bodies are analysed lazily: code that no test or entry point calls is not compiled. `main.zig` uses `std.testing.refAllDecls` on the example namespaces to keep them compiling. `src/dsp/filters/` is not wired into `dsp.zig` yet.
 
 Run a single file's tests directly. Pure Zig files need nothing extra:
 
@@ -67,7 +68,8 @@ Three layers, wired together only at the top (`src/examples.zig` shows the full 
 dsp/        allocating analysis kernels (FFT, waves, filters, complex storage)
 graph/      Graph -> TopologyQueue -> Scheduler, with a UniformChannelViews buffer pool
 backends/   ALSA devices; comptime-specialized on a user Context type + callback
-common/     audio_buffer (views + pool) and audio_specs (BufferSize/BlockSize/SampleRate enums)
+common/     audio_buffer (old views + pool) and audio_specs (BufferSize/BlockSize/SampleRate enums)
+core/       buffer/ (new buffer contract); nothing else imports it yet
 ```
 
 ### Comptime Context pattern (backends)
@@ -87,7 +89,11 @@ Nodes implement `prepare(*Self, PrepareContext)`, `process(*Self, ProcessContext
 
 ### Buffers
 
-`common/audio_buffer.zig`: `ChannelView` owns storage, `UnmanagedChannelView` borrows it, `UniformChannelViews` is one contiguous pool exposing N views. Access is interleaved or non-interleaved via a runtime tag; `block_size` doubles as physical stride. The plan renames these (`OwnedAudioBuffer`, `AudioBlock`, `ConstAudioBlock`, `AudioBufferPool`) and separates `frame_count` from `channel_stride`. Do not add features to the old names; build the new contract alongside and migrate.
+Two implementations coexist until the graph migrates in M3.
+
+**New (`core/buffer/`, contract in `docs/buffer-contract.md`):** import only `core/buffer/buffer.zig`. `AudioBlock(T)` and `ConstAudioBlock(T)` are borrowed planar views (`samples`, `channel_count`, `frame_count`, `channel_stride`) generated from one private `Block(T, mutability)` in `block.zig`; `channel(c)` returns a slice of the active frames. `OwnedAudioBuffer` and `AudioBufferPool` (`storage.zig`) own 64-byte-aligned storage, take the allocator in `init`/`deinit` without storing it, and lend blocks through `borrowBlock`/`borrowSlot`. `ops.zig` has `clear`, `copy`, `accumulate`, `interleave`, `deinterleave`; they return `shape_mismatch` or `forbidden_overlap` and write nothing on failure. `ProcessContext(T)` has separate `inputs` and `outputs`. Interleaved audio exists only as packed slices at device/file boundaries.
+
+**Old (`common/audio_buffer.zig`):** `ChannelView` owns storage, `UnmanagedChannelView` borrows it, `UniformChannelViews` is one contiguous pool exposing N views. Access is interleaved or non-interleaved via a runtime tag; `block_size` doubles as physical stride. Still used by the graph and scheduler. Do not add features to it.
 
 ### DSP
 

@@ -45,6 +45,7 @@ test {
     _ = graph;
     _ = audio_specs;
     _ = @import("common/audio_buffer.zig");
+    _ = @import("core/buffer/buffer.zig");
     _ = @import("utils/utils.zig");
 
     // examples have no tests; reference them so they keep compiling

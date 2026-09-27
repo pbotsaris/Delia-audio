@@ -13,6 +13,10 @@ This report consolidates our discussion and adds a targeted inspection of the pu
 
 **Validation limits:** This was static source inspection, not a complete repository audit. No Zig build, test suite, benchmark, or audio-hardware test was executed. No immutable commit snapshot was established; the source links below track `main`. Record a commit hash and working compiler version before implementation. Code-shaped examples are design sketches, not compiled patches.
 
+**Baseline and revision (26 September 2026, after the Zig 0.16 migration):** The plan was reviewed against the working tree at commit `b1aaad0` with Zig 0.16.0 and zBench v0.13.0. `zig build test` passes 114/114. `build.zig.zon` declares `minimum_zig_version = "0.16.0"`. This review decided the buffer representation (4.2), added the node I/O contract (4.5), and set the milestone order to M1, M3, M2 (section 12). The buffer contract is `docs/buffer-contract.md`, with a design sketch in `docs/examples/audio_block_sketch.zig`.
+
+**M1 complete (27 September 2026):** the buffer contract is implemented in `src/core/buffer/` and wired into `zig build test` (137/137 passing, 23 of them in `src/core/buffer/buffer.zig`). All 14 acceptance items in the contract have a test. `ProcessContext` lives in `src/core/buffer/buffer.zig`. Nothing uses the new types yet: `src/common/audio_buffer.zig`, the graph, and the ALSA backend are unchanged and migrate in M3 and M4.
+
 ## Contents
 
 1. [Project direction and scope](#1-project-direction-and-scope)
@@ -136,7 +140,9 @@ channel(c) = samples[c * channel_stride .. c * channel_stride + frame_count]
 
 Validate dimensions, multiplication overflow, storage bounds, and `frame_count <= channel_stride` when creating views. A sub-block must preserve the parent's physical stride. A zero-frame block should have defined behavior.
 
-An alternative is a slice of channel slices. That can represent separately allocated channels naturally. Choose between these representations based on graph needs; do not repeatedly allocate channel descriptors while processing.
+**Decision: contiguous storage with an explicit stride.** A block is a four-field value, needs no channel-descriptor storage, and a sub-block is a shifted base with the same stride. The alternative, a slice of channel slices, represents separately allocated channels naturally but needs descriptor storage that must itself be prepared. Revisit only if a backend delivers channels that cannot be described by one base and one stride.
+
+`frame_count` is a runtime `usize`. The existing `BlockSize` enum cannot express a 100-frame partial block; it remains the type for the declared maximum block size in preparation options.
 
 ### 4.3 Keep layout conversion at explicit boundaries
 
@@ -155,6 +161,23 @@ For every kernel, specify whether exact in-place operation is supported, whether
 The pool must account for channel stride and alignment, not just total sample count. Reusing a buffer requires proof that all earlier consumers have finished.
 
 **Acceptance tests:** mono/stereo/multichannel views; partial blocks; sub-blocks; independent pool slots; layout round trips; shape mismatch rejection; forbidden overlap; and writes confined to active frames.
+
+### 4.5 Node I/O contract
+
+The buffer contract cannot be finished without knowing what a node receives, because that decides what the pool hands out. The current `ProcessContext` carries one buffer, so every node is implicitly in-place. That is why `processGraph()` copies a parent's view into its child's, and why fan-in overwrites rather than mixes.
+
+**Decision: separate inputs and outputs.**
+
+```text
+ProcessContext(T)
+    inputs       []const ConstAudioBlock(T)    one block per input port
+    outputs      []const AudioBlock(T)         one block per output port
+    frame_count  usize
+```
+
+Outputs are disjoint from inputs. A node writes every active frame of every output. A port receives exactly one block; summing several producers into it is an explicit mix operation emitted by the graph compiler (7.2), not something a node does. In-place execution becomes a later compiler optimization for nodes that declare exact in-place support.
+
+The full rules are in `docs/buffer-contract.md`, section 8.
 
 ## 5. FFT architecture
 
@@ -467,10 +490,12 @@ Dependencies should point toward the core. Numerical kernels must not import the
 
 Proceed by acceptance criteria, not calendar promises. FFT and graph development can diverge after the buffer contract; the initial sine/gain graph does not depend on FFT completion.
 
+**Order: M1, then M3, then M2.** Milestone numbers are identifiers, not the sequence. The offline graph slice is the first real consumer of the buffer contract, so it exposes contract mistakes while they are still cheap to fix. The FFT is independent of both and can follow. **M0 is complete** apart from tagging the reference point, and **M1 is complete** (see the notes at the top). The next milestone is M3.
+
 | Milestone | Implementation scope | Exit criteria |
 |---|---|---|
-| M0: Reproducible baseline | Pin repository/compiler/dependencies; inventory tests; preserve a reference branch | A fresh checkout has documented build/test commands; failures are recorded, not concealed |
-| M1: Buffer contracts | Owned/borrowed types, planar blocks, stride-aware sub-blocks, conversion helpers | Ownership, bounds, layout, partial-block, and overlap tests pass |
+| M0: Reproducible baseline (done) | Pin repository/compiler/dependencies; inventory tests; preserve a reference branch | A fresh checkout has documented build/test commands; failures are recorded, not concealed |
+| M1: Buffer contracts (done) | Owned/borrowed types, planar blocks, stride-aware sub-blocks, conversion helpers, node I/O contract | Ownership, bounds, layout, partial-block, and overlap tests pass |
 | M2: Planned scalar FFT | Plan/workspace lifecycle; scalar radix-2; explicit normalization; analysis adapter | Independent forward/inverse tests pass; repeated execution performs no allocation; no shared mutable scratch |
 | M3: Offline graph slice | Sine -> Gain -> Output; then fan-out and explicit mixer; flat execution | Deterministic offline output; repeated blocks correct; all active outputs written; no render allocations |
 | M4: Backend integration | ALSA transfer/lifecycle repairs and the same graph callback; CoreAudio may follow independently | Fault-injection tests plus documented full-duplex hardware run; clean start/stop and bounded recovery policy |
@@ -518,7 +543,7 @@ For the engine, measure complete block processing and tail latency under realist
 
 ## 14. Learning and development workflow
 
-For each change, write the contract and a prediction before the implementation. Read a narrowly selected reference, explain the algorithm, build the simplest correct version, test it independently, and only then optimize.
+For each change, write the contract and a prediction before the implementation. Keep a contract document to about a page of rules and a test list: it should be quicker to read than the code it governs, and it is allowed to be wrong and revised once the first consumer exists. Read a narrowly selected reference, explain the algorithm, build the simplest correct version, test it independently, and only then optimize.
 
 Keep changes small enough to answer one question: "Does this view preserve stride?", "Does this FFT convention match the DFT?", or "Does this SIMD layout improve a complete transform?"
 
@@ -539,6 +564,9 @@ Prefer readable scalar kernels over a generic kernel framework invented before t
 | Require compile-time FFT sizes? | No; keep optional specialization as an evidence-driven extension |
 | Require all kernels to use one internal complex layout? | No; standardize the public contract, permit backend-specific internals |
 | Canonical graph audio? | Planar `f32`, with explicit stride and bounded frame count |
+| Buffer representation? | Contiguous storage plus `channel_stride`; not a slice of channel slices |
+| Node I/O? | Separate const inputs and writable outputs per port; in-place is a later compiler optimization |
+| Milestone order? | M1, M3, M2: the graph slice validates the buffer contract before the FFT work starts |
 | Graph execution model? | Single render thread and precompiled DAG operations initially |
 | Graph replacement? | Stop/reprepare first; bounded publication and retirement later |
 | Linux backend? | Direct ALSA; Delia server as a later layer |
@@ -546,13 +574,20 @@ Prefer readable scalar kernels over a generic kernel framework invented before t
 
 ### First implementation backlog
 
-- [ ] Record the exact starting commit, compiler version, dependency versions, and current build/test failures. The inspected manifest has no active minimum-Zig-version entry; a commented example is not a compiler pin. [D6]
-- [ ] Write `docs/buffer-contract.md` and implement owned storage plus borrowed, stride-correct planar views.
-- [ ] Add regression tests for partial blocks, mismatched copy shapes, and `ComplexList` logical length versus capacity.
+Listed in working order (M1, M3, M2, M4).
+
+- [x] Record the exact starting commit, compiler version, dependency versions, and current build/test failures. Done: commit `b1aaad0`, Zig 0.16.0, zBench v0.13.0, 114/114 tests passing, `minimum_zig_version` set in the manifest. [D6]
+- [ ] Tag the reference point (for example `pre-refactor`) so old implementations stay reachable for comparison.
+- [x] Write `docs/buffer-contract.md`, including the node I/O contract.
+- [x] Implement `src/core/buffer/block.zig` (`AudioBlock`, `ConstAudioBlock`) against the contract and add it to a `test` block reachable from `src/main.zig`.
+- [x] Implement `OwnedAudioBuffer` and `AudioBufferPool`, then the block operations (`clear`, `copy`, `accumulate`, `interleave`, `deinterleave`).
+- [x] Add `ProcessContext` with separate inputs and outputs, tested with a gain node and a source node.
+- [ ] Add regression tests for the scheduler's inverted buffer-reuse branch and for mismatched copy shapes in the old views, before the scheduler migrates.
+- [ ] Build the offline Sine -> Gain -> Output slice on the new node I/O contract; add fan-out/mixing before optimizing buffer reuse.
+- [ ] Add a regression test for `ComplexList` logical length versus capacity.
 - [ ] Write `docs/fft-contract.md`: direction, normalization, ordering, supported lengths, aliasing, workspace, and ownership.
 - [ ] Extract an independent reference DFT and build one planned scalar radix-2 implementation.
 - [ ] Keep an allocating analysis adapter so existing experiments remain useful.
-- [ ] Build the offline Sine -> Gain -> Output slice; add fan-out/mixing before optimizing buffer reuse.
 - [ ] Repair ALSA return-value/recovery/transfer invariants with scripted failure tests before relying on audible playback alone.
 
 ### Release gate
