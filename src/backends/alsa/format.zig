@@ -67,10 +67,7 @@ pub fn Format(comptime T: type) type {
             return @TypeOf(self.sample_type);
         }
 
-        pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-            _ = fmt;
-            _ = options;
-
+        pub fn format(self: Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
             try writer.print("  Format\n", .{});
             try writer.print("  ├── signedness:         {s}\n", .{@tagName(self.signedness)});
             try writer.print("  ├── byte_order:         {s}\n", .{@tagName(self.byte_order)});

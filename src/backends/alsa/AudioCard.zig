@@ -133,10 +133,7 @@ pub const AudioCardInfo = struct {
         self.selected_settings.access_type = ss.default(settings.AccessType);
     }
 
-    pub fn format(self: AudioCardInfo, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = fmt;
-        _ = options;
-
+    pub fn format(self: AudioCardInfo, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         // null means the info is for a card, not a port, so we adjust indentation
         if (self.supported_settings == null) {
             try writer.print("  │  Ident:       {s}\n", .{self.identifier});
@@ -158,17 +155,17 @@ pub const AudioCardInfo = struct {
         try writer.print("  │    │\n", .{});
 
         if (self.supported_settings) |ss| {
-            try writer.print("{s}", .{ss});
+            try writer.print("{f}", .{ss});
         }
     }
 
-    pub fn deinit(self: AudioCardInfo) void {
+    pub fn deinit(self: *AudioCardInfo) void {
         self.allocator.free(self.id);
         self.allocator.free(self.name);
         self.allocator.free(self.identifier);
 
         if (self.supported_settings) |*sf| {
-            sf.*.deinit();
+            sf.deinit(self.allocator);
         }
     }
 
@@ -198,8 +195,8 @@ pub fn init(allocator: std.mem.Allocator, details: AudioCardInfo) AudioCard {
     return AudioCard{ //
         .allocator = allocator,
         .details = details,
-        .captures = std.ArrayList(AudioCardInfo).init(allocator),
-        .playbacks = std.ArrayList(AudioCardInfo).init(allocator),
+        .captures = .empty,
+        .playbacks = .empty,
     };
 }
 
@@ -213,7 +210,7 @@ pub fn addPlayback(self: *AudioCard, index: c_int, id: [*c]const u8, name: [*c]c
     var details = try AudioCardInfo.init(self.allocator, .{ .card = self.details.index, .device = index }, id, name);
     details.addSupportedFormats(StreamType.playback);
 
-    try self.playbacks.append(details);
+    try self.playbacks.append(self.allocator, details);
 }
 
 /// Adds a capture port to the audio card.
@@ -226,7 +223,7 @@ pub fn addCapture(self: *AudioCard, index: c_int, id: [*c]const u8, name: [*c]co
     var details = try AudioCardInfo.init(self.allocator, .{ .card = self.details.index, .device = index }, id, name);
     details.addSupportedFormats(StreamType.capture);
 
-    try self.captures.append(details);
+    try self.captures.append(self.allocator, details);
 }
 
 /// Searches for a playback port based on the specified criteria.
@@ -407,11 +404,8 @@ pub fn setSampleRate(self: *AudioCard, stream_type: StreamType, at: usize, sampl
     return CardError.invalid_settings;
 }
 
-pub fn format(self: AudioCard, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-    _ = fmt;
-    _ = options;
-
-    try writer.print("\n{s}", .{self.details});
+pub fn format(self: AudioCard, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+    try writer.print("\n{f}", .{self.details});
     try writer.print("  ├── Playbacks: ({d})\n", .{self.playbacks.items.len});
 
     if (self.playbacks.items.len == 0) {
@@ -420,7 +414,7 @@ pub fn format(self: AudioCard, comptime fmt: []const u8, options: std.fmt.Format
 
     for (0.., self.playbacks.items) |i, playback| {
         try writer.print("  │    ├── PLAYBACK PORT: {d}\n", .{i});
-        try writer.print("{s}", .{playback});
+        try writer.print("{f}", .{playback});
         try writer.print("  │    ├──  Select Methods:\n", .{});
         try writer.print("  │    │  hardware.selectPortAt(.playback, {d})\n", .{i});
         try writer.print("  │    │  card.selectPlaybackAt({d})\n", .{i});
@@ -435,7 +429,7 @@ pub fn format(self: AudioCard, comptime fmt: []const u8, options: std.fmt.Format
 
     for (0.., self.captures.items) |i, capture| {
         try writer.print("  │    ├── CAPTURE PORT: {d}\n", .{i});
-        try writer.print("{s}", .{capture});
+        try writer.print("{f}", .{capture});
         try writer.print("  │    ├── Select Methods:\n", .{});
         try writer.print("  │    │ hardware.selectPortAt(.capture, {d})\n", .{i});
         try writer.print("  │    │ card.selectCaptureAt({d})\n", .{i});
@@ -453,8 +447,8 @@ pub fn deinit(self: *AudioCard) void {
         capture.*.deinit();
     }
 
-    self.playbacks.deinit();
-    self.captures.deinit();
+    self.playbacks.deinit(self.allocator);
+    self.captures.deinit(self.allocator);
 }
 
 pub fn findBy(collection: std.ArrayList(AudioCardInfo), by: FindBy, pattern: []const u8) ?AudioCardInfo {

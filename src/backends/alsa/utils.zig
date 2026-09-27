@@ -26,3 +26,17 @@ pub fn tstampToStr(tstamp_status: c_alsa.snd_pcm_tstamp_t) []const u8 {
         else => "UNKNOWN",
     };
 }
+
+/// Blocks the calling thread for `ns` nanoseconds. Resumes the sleep if a signal interrupts it.
+pub fn sleepNs(ns: u64) void {
+    var req: std.c.timespec = .{
+        .sec = @intCast(ns / std.time.ns_per_s),
+        .nsec = @intCast(ns % std.time.ns_per_s),
+    };
+    var rem: std.c.timespec = undefined;
+
+    while (std.c.nanosleep(&req, &rem) != 0) {
+        if (std.c.errno(-1) != .INTR) return;
+        req = rem;
+    }
+}

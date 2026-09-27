@@ -371,49 +371,49 @@ pub const FormatType = enum(c_int) {
     }
 };
 
-pub const formats: [@typeInfo(FormatType).Enum.fields.len]c_int = blk: {
+pub const formats: [@typeInfo(FormatType).@"enum".fields.len]c_int = blk: {
     const info = @typeInfo(FormatType);
-    const len = info.Enum.fields.len;
+    const len = info.@"enum".fields.len;
     var temp: [len]c_int = undefined;
 
     for (0..len) |i| {
-        temp[i] = info.Enum.fields[i].value;
+        temp[i] = info.@"enum".fields[i].value;
     }
 
     break :blk temp;
 };
 
-pub const access_types: [@typeInfo(AccessType).Enum.fields.len]c_uint = blk: {
+pub const access_types: [@typeInfo(AccessType).@"enum".fields.len]c_uint = blk: {
     const info = @typeInfo(AccessType);
-    const len = info.Enum.fields.len;
+    const len = info.@"enum".fields.len;
     var temp: [len]c_uint = undefined;
 
     for (0..len) |i| {
-        temp[i] = info.Enum.fields[i].value;
+        temp[i] = info.@"enum".fields[i].value;
     }
 
     break :blk temp;
 };
 
-pub const sample_rates: [@typeInfo(SampleRate).Enum.fields.len]u32 = blk: {
+pub const sample_rates: [@typeInfo(SampleRate).@"enum".fields.len]u32 = blk: {
     const info = @typeInfo(SampleRate);
-    const len = info.Enum.fields.len;
+    const len = info.@"enum".fields.len;
     var temp: [len]u32 = undefined;
 
     for (0..len) |i| {
-        temp[i] = info.Enum.fields[i].value;
+        temp[i] = info.@"enum".fields[i].value;
     }
 
     break :blk temp;
 };
 
-pub const channel_counts: [@typeInfo(ChannelCount).Enum.fields.len]u32 = blk: {
+pub const channel_counts: [@typeInfo(ChannelCount).@"enum".fields.len]u32 = blk: {
     const info = @typeInfo(ChannelCount);
-    const len = info.Enum.fields.len;
+    const len = info.@"enum".fields.len;
     var temp: [len]u32 = undefined;
 
     for (0..len) |i| {
-        temp[i] = info.Enum.fields[i].value;
+        temp[i] = info.@"enum".fields[i].value;
     }
 
     break :blk temp;

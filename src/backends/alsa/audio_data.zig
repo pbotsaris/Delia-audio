@@ -23,7 +23,6 @@ pub fn GenericAudioData(format_type: FormatType) type {
         sample_rate: u32,
         data: []u8,
         position: usize,
-        comptime T: type = T,
 
         // GenericAudioData will always expose sample as floats to the callers
         // We must be mindful of the precision loss, so for 24 and 32 bits audio, we use f64 precision.

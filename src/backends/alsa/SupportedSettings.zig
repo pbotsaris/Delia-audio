@@ -54,15 +54,15 @@ pub fn init(allocator: std.mem.Allocator, hw_identifier: [:0]const u8, stream_ty
         return null;
     }
 
-    var supported_formats = std.ArrayList(FormatType).init(allocator);
-    var supported_sample_rates = std.ArrayList(SampleRate).init(allocator);
-    var supported_channels_counts = std.ArrayList(Channels).init(allocator);
-    var access_types = std.ArrayList(settings.AccessType).init(allocator);
+    var supported_formats: std.ArrayList(FormatType) = .empty;
+    var supported_sample_rates: std.ArrayList(SampleRate) = .empty;
+    var supported_channels_counts: std.ArrayList(Channels) = .empty;
+    var access_types: std.ArrayList(settings.AccessType) = .empty;
 
     for (settings.formats) |f| {
         if (f < 0) continue; // skip FormatType.unknown
         if (c_alsa.snd_pcm_hw_params_test_format(pcm_handle, params, f) >= 0) {
-            supported_formats.append(@enumFromInt(f)) catch {
+            supported_formats.append(allocator, @enumFromInt(f)) catch {
                 log.warn("Could not append format {d}", .{f});
             };
         }
@@ -70,7 +70,7 @@ pub fn init(allocator: std.mem.Allocator, hw_identifier: [:0]const u8, stream_ty
 
     for (settings.sample_rates) |sr| {
         if (c_alsa.snd_pcm_hw_params_test_rate(pcm_handle, params, sr, 0) >= 0) {
-            supported_sample_rates.append(@enumFromInt(sr)) catch {
+            supported_sample_rates.append(allocator, @enumFromInt(sr)) catch {
                 const sr_tag = @tagName(@as(SampleRate, @enumFromInt(sr)));
                 log.warn("SupportedSettings: Could not append sample rate settings {s}", .{sr_tag});
             };
@@ -79,7 +79,7 @@ pub fn init(allocator: std.mem.Allocator, hw_identifier: [:0]const u8, stream_ty
 
     for (settings.channel_counts) |c| {
         if (c_alsa.snd_pcm_hw_params_test_channels(pcm_handle, params, c) >= 0) {
-            supported_channels_counts.append(@enumFromInt(c)) catch {
+            supported_channels_counts.append(allocator, @enumFromInt(c)) catch {
                 const c_tag = @tagName(@as(Channels, @enumFromInt(c)));
                 log.warn("SupportedSettings: Could not append channel settings {s}", .{c_tag});
             };
@@ -88,7 +88,7 @@ pub fn init(allocator: std.mem.Allocator, hw_identifier: [:0]const u8, stream_ty
 
     for (settings.access_types) |a| {
         if (c_alsa.snd_pcm_hw_params_test_access(pcm_handle, params, a) >= 0) {
-            access_types.append(@enumFromInt(a)) catch {
+            access_types.append(allocator, @enumFromInt(a)) catch {
                 const a_tag = @tagName(@as(settings.AccessType, @enumFromInt(a)));
                 log.warn("SupportedSettings: Could not append access type settings {s}", .{a_tag});
             };
@@ -151,10 +151,7 @@ pub fn default(self: SupportedSettings, SettingType: type) ?SettingType {
     }
 }
 
-pub fn format(self: SupportedSettings, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-    _ = fmt;
-    _ = options;
-
+pub fn format(self: SupportedSettings, writer: *std.Io.Writer) std.Io.Writer.Error!void {
     const default_access = self.default(AccessType);
 
     try writer.print("  │    │     ├──  Supported Settings: \n", .{});
@@ -190,9 +187,9 @@ pub fn format(self: SupportedSettings, comptime fmt: []const u8, options: std.fm
     try writer.print("  │    │     └──\n", .{});
 }
 
-pub fn deinit(self: SupportedSettings) void {
-    self.formats.deinit();
-    self.sample_rates.deinit();
-    self.channel_counts.deinit();
-    self.access_types.deinit();
+pub fn deinit(self: *SupportedSettings, allocator: std.mem.Allocator) void {
+    self.formats.deinit(allocator);
+    self.sample_rates.deinit(allocator);
+    self.channel_counts.deinit(allocator);
+    self.access_types.deinit(allocator);
 }

@@ -50,7 +50,7 @@ allocator: std.mem.Allocator,
 /// - Returns: An initialized `Hardware` struct.
 /// - Errors: Can return errors related to ALSA operations or memory allocations.
 pub fn init(allocator: std.mem.Allocator) !Hardware {
-    var alsa = Hardware{ .cards = std.ArrayList(AudioCard).init(allocator), .allocator = allocator };
+    var alsa = Hardware{ .cards = .empty, .allocator = allocator };
     try loadSystemCards(&alsa);
     return alsa;
 }
@@ -60,7 +60,7 @@ pub fn deinit(self: *Hardware) void {
         card.*.deinit();
     }
 
-    self.cards.deinit();
+    self.cards.deinit(self.allocator);
 }
 /// Retrieves an `AudioCard` by its index in the list of detected cards.
 ///
@@ -110,7 +110,7 @@ pub fn getAudioCardByIdent(self: Hardware, ident: []const u8) HardwareError!Audi
     for (self.cards.items) |card| {
 
         // first we try to match the identifier just with the card index e.g. hw:0
-        var split = std.mem.split(u8, card.details.identifier, ",");
+        var split = std.mem.splitScalar(u8, card.details.identifier, ',');
 
         if (split.next()) |i| {
             if (std.mem.eql(u8, ident, i)) {
@@ -328,15 +328,12 @@ pub fn setSelectedSampleRate(self: *Hardware, sample_rate: SampleRate) !void {
     try card.setSampleRate(self.selected_stream_type, self.selected_port, sample_rate);
 }
 
-pub fn format(self: Hardware, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-    _ = fmt;
-    _ = options;
-
+pub fn format(self: Hardware, writer: *std.Io.Writer) std.Io.Writer.Error!void {
     try writer.print("Audio Hardware Info\n", .{});
 
     for (0.., self.cards.items) |i, card| {
         try writer.print("Card {d}\n", .{i});
-        try writer.print("{s}", .{card});
+        try writer.print("{f}", .{card});
         try writer.print("\n", .{});
     }
 }
@@ -354,7 +351,7 @@ fn validateIdentifier(ident: []const u8) HardwareError!void {
 }
 
 fn addCard(self: *Hardware, card: AudioCard) !void {
-    try self.cards.append(card);
+    try self.cards.append(self.allocator, card);
 }
 
 fn loadSystemCards(self: *Hardware) !void {
@@ -451,7 +448,7 @@ test "getAudioCardAt returns correct AudioCard or error" {
 
     // Mocking the Hardware and AudioCard setup
     var hardware = Hardware{
-        .cards = std.ArrayList(AudioCard).init(allocator),
+        .cards = .empty,
         .allocator = allocator,
     };
 
@@ -460,14 +457,14 @@ test "getAudioCardAt returns correct AudioCard or error" {
     const ident1 = "hw:0";
     const ident2 = "hw:1";
 
-    try hardware.cards.append(
+    try hardware.cards.append(allocator, 
         AudioCard.init(
             allocator,
             try AudioCardInfo.init(allocator, .{ .card = 0, .device = 0 }, ident1, "Card 1"),
         ),
     );
 
-    try hardware.cards.append(
+    try hardware.cards.append(allocator, 
         AudioCard.init(
             allocator,
             try AudioCardInfo.init(allocator, .{ .card = 1, .device = 0 }, ident2, "Card 2"),
@@ -493,7 +490,7 @@ test "getAudioCardByIdent returns correct AudioCard or error" {
 
     // Mocking the Hardware and AudioCard setup
     var hardware = Hardware{
-        .cards = std.ArrayList(AudioCard).init(allocator),
+        .cards = .empty,
         .allocator = allocator,
     };
     defer hardware.deinit();
@@ -502,10 +499,10 @@ test "getAudioCardByIdent returns correct AudioCard or error" {
     const ident1 = "hw:0";
     const ident2 = "hw:1,0";
 
-    try hardware.cards.append(
+    try hardware.cards.append(allocator, 
         AudioCard.init(allocator, try AudioCardInfo.init(allocator, .{ .card = 0, .device = 0 }, "someid", "Card 1")),
     );
-    try hardware.cards.append(
+    try hardware.cards.append(allocator, 
         AudioCard.init(allocator, try AudioCardInfo.init(allocator, .{ .card = 1, .device = 0 }, "someid2", "Card 2")),
     );
 
@@ -525,7 +522,7 @@ test "selectAudioPortAt and selectAudioPortByIdent select correct port or return
 
     // Mocking the Hardware and AudioCard setup
     var hardware = Hardware{
-        .cards = std.ArrayList(AudioCard).init(allocator),
+        .cards = .empty,
         .allocator = allocator,
     };
     defer hardware.deinit();
@@ -537,15 +534,15 @@ test "selectAudioPortAt and selectAudioPortByIdent select correct port or return
     );
 
     // Manually add playback and capture ports to avoid ALSA API calls
-    try card.playbacks.append(
+    try card.playbacks.append(allocator, 
         try AudioCardInfo.init(allocator, .{ .card = 0, .device = 0 }, "playback_id", "Playback 1"),
     );
-    try card.captures.append(
+    try card.captures.append(allocator, 
         try AudioCardInfo.init(allocator, .{ .card = 0, .device = 1 }, "capture_id", "Capture 1"),
     );
 
     // Add card to hardware
-    try hardware.cards.append(card);
+    try hardware.cards.append(allocator, card);
 
     try hardware.selectAudioPortAt(StreamType.playback, 0);
     try std.testing.expectEqual(0, hardware.selected_port);
@@ -568,7 +565,7 @@ test "selectAudioPortBy selects correct port or returns errors" {
 
     // Mocking the Hardware and AudioCard setup
     var hardware = Hardware{
-        .cards = std.ArrayList(AudioCard).init(allocator),
+        .cards = .empty,
         .allocator = allocator,
     };
     defer hardware.deinit();
@@ -580,15 +577,15 @@ test "selectAudioPortBy selects correct port or returns errors" {
     );
 
     // Manually add playback and capture ports to avoid ALSA API calls
-    try card.playbacks.append(
+    try card.playbacks.append(allocator, 
         try AudioCardInfo.init(allocator, .{ .card = 0, .device = 0 }, "playback_id", "Playback 1"),
     );
-    try card.captures.append(
+    try card.captures.append(allocator, 
         try AudioCardInfo.init(allocator, .{ .card = 0, .device = 1 }, "capture_id", "Capture 1"),
     );
 
     // Add card to hardware
-    try hardware.cards.append(card);
+    try hardware.cards.append(allocator, card);
 
     try hardware.selectAudioPortBy(StreamType.playback, FindBy.id, "playback_id");
     try std.testing.expectEqual(0, hardware.selected_port);
@@ -608,19 +605,19 @@ test "findCardBy finds correct card or returns null" {
 
     // Mocking the Hardware and AudioCard setup
     var hardware = Hardware{
-        .cards = std.ArrayList(AudioCard).init(allocator),
+        .cards = .empty,
         .allocator = allocator,
     };
     defer hardware.deinit();
 
-    try hardware.cards.append(
+    try hardware.cards.append(allocator, 
         AudioCard.init(
             allocator,
             try AudioCardInfo.init(allocator, .{ .card = 0, .device = 0 }, "someid1", "Card 1"),
         ),
     );
 
-    try hardware.cards.append(
+    try hardware.cards.append(allocator, 
         AudioCard.init(
             allocator,
             try AudioCardInfo.init(allocator, .{ .card = 1, .device = 0 }, "someid2", "Card 2"),
@@ -644,7 +641,7 @@ test "getSelectedAudioPortCounterpart finds counterpart or returns error" {
     const AudioCardInfo = AudioCard.AudioCardInfo;
 
     var hardware = Hardware{
-        .cards = std.ArrayList(AudioCard).init(allocator),
+        .cards = .empty,
         .allocator = allocator,
         .selected_card = 0,
         .selected_port = 0,
@@ -659,15 +656,15 @@ test "getSelectedAudioPortCounterpart finds counterpart or returns error" {
     );
 
     // Add playback and capture ports with the same identifier to simulate counterparts
-    try card.playbacks.append(
+    try card.playbacks.append(allocator, 
         try AudioCardInfo.init(allocator, .{ .card = 0, .device = 0 }, "hw:0,0", "Playback 1"),
     );
 
-    try card.captures.append(
+    try card.captures.append(allocator, 
         try AudioCardInfo.init(allocator, .{ .card = 0, .device = 0 }, "hw:0,0", "Capture 1"),
     );
 
-    try hardware.cards.append(card);
+    try hardware.cards.append(allocator, card);
 
     try hardware.selectAudioPortAt(StreamType.playback, 0);
     const capture_port = try hardware.getSelectedAudioPortCounterpart();
@@ -682,11 +679,11 @@ test "getSelectedAudioPortCounterpart finds counterpart or returns error" {
         try AudioCardInfo.init(allocator, .{ .card = 1, .device = 0 }, "hw:1", "Card 2"),
     );
 
-    try card_no_counterpart.playbacks.append(
+    try card_no_counterpart.playbacks.append(allocator, 
         try AudioCardInfo.init(allocator, .{ .card = 1, .device = 0 }, "hw:1,0", "Playback Only"),
     );
 
-    try hardware.cards.append(card_no_counterpart);
+    try hardware.cards.append(allocator, card_no_counterpart);
     hardware.selected_card = 1;
     hardware.selected_port = 0;
     hardware.selected_stream_type = StreamType.playback;

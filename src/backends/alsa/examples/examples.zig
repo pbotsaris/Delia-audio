@@ -52,7 +52,7 @@ const HalfDuplexCaptureContext = struct {
 
     pub fn callback(_: *Self, data: HalfDuplexDevice.AudioDataType()) void {
         log.debug("in sample rate: {d}\n", .{data.sample_rate});
-        log.debug("in format: {d}\n", .{data.format});
+        log.debug("in format: {f}\n", .{data.format});
         log.debug("in channels: {d}\n", .{data.channels});
         log.debug("in total sample count: {d}\n", .{data.totalSampleCount()});
     }
@@ -91,7 +91,7 @@ const FullDuplexContext = struct {
 };
 
 pub fn playbackSineWave() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() != .ok) std.debug.print("Failed to deinit allocator.", .{});
 
     const allocator = gpa.allocator();
@@ -123,7 +123,7 @@ pub fn playbackSineWave() void {
 }
 
 pub fn halfDuplexCapture() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() != .ok) std.debug.print("Failed to deinit allocator.", .{});
 
     const allocator = gpa.allocator();
@@ -169,43 +169,43 @@ fn probeCallback(data: latency.LatencyData) void {
     const actual_time = data.actual_time.formatBuf(&actual_time_buf) catch |err| {
         // Note that you must catch errors in this callback as it is being called in the audio loop.
         // we don't want this kind of side effects to crash the audio loop
-        log.warn("Failed to format actual time: {!}", .{err});
+        log.warn("Failed to format actual time: {t}", .{err});
         return;
     };
 
     // the time it should have taken to process the frames vs what it actually took
     const expect_time = data.expect_time.formatBuf(&expect_time_buf) catch |err| {
-        log.warn("Failed to format expect time: {!}", .{err});
+        log.warn("Failed to format expect time: {t}", .{err});
         return;
     };
 
     // the latency introduced by the hardware buffering
     const buf_lat = data.buffer_latency.formatBuf(&buffer_latency_buf) catch |err| {
-        log.warn("Failed to format buffer latency: {!}", .{err});
+        log.warn("Failed to format buffer latency: {t}", .{err});
         return;
     };
 
     // the total latency acrued across the number of cycles (buffer_cycles)
     const total_latency = data.total_latency.formatBuf(&total_latency_buf) catch |err| {
-        log.warn("Failed to format latency: {!}", .{err});
+        log.warn("Failed to format latency: {t}", .{err});
         return;
     };
 
     // the average latency for one cycle so basically total latency / buffer_cycles
     const average_latency = data.average_latency.formatBuf(&avg_latency_buf) catch |err| {
-        log.warn("Failed to format average latency: {!}", .{err});
+        log.warn("Failed to format average latency: {t}", .{err});
         return;
     };
 
     // the time the probe started
     const start_time = data.start_time.formatBuf(&start_time_buf) catch |err| {
-        log.warn("Failed to format start time: {!}", .{err});
+        log.warn("Failed to format start time: {t}", .{err});
         return;
     };
 
     // the time the probe ended
     const end_time = data.end_time.formatBuf(&end_time_buf) catch |err| {
-        log.warn("Failed to format end time: {!}", .{err});
+        log.warn("Failed to format end time: {t}", .{err});
         return;
     };
 
@@ -234,7 +234,7 @@ fn probeCallback(data: latency.LatencyData) void {
 }
 
 pub fn fullDuplexCallbackWithLatencyProbe() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() != .ok) std.debug.print("Failed to deinit allocator.", .{});
 
     const allocator = gpa.allocator();
@@ -252,16 +252,16 @@ pub fn fullDuplexCallbackWithLatencyProbe() void {
             .buffer_cycles = 10,
         },
     }) catch |err| {
-        log.err("Failed to init device: {!}", .{err});
+        log.err("Failed to init device: {t}", .{err});
         return;
     };
 
     defer dev.deinit() catch |err| {
-        log.err("Failed to deinit device: {!}", .{err});
+        log.err("Failed to deinit device: {t}", .{err});
     };
 
     dev.prepare() catch |err| {
-        log.err("Failed to prepare device: {!}", .{err});
+        log.err("Failed to prepare device: {t}", .{err});
     };
 
     var ctx = FullDuplexContext{};
@@ -276,13 +276,13 @@ pub fn fullDuplexCallbackWithLatencyProbe() void {
 //  Note that devices must be operating in the same sample rate, format and buffer size
 //  otherwise the driver will fail to start the devices
 pub fn fullDuplexCallbackUnlinkedDevices() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() != .ok) std.debug.print("Failed to deinit allocator.", .{});
 
     const allocator = gpa.allocator();
 
     var hardware = alsa.Hardware.init(allocator) catch |err| {
-        log.err("Failed to initialize hardware: {!}", .{err});
+        log.err("Failed to initialize hardware: {t}", .{err});
         return;
     };
 
@@ -297,11 +297,11 @@ pub fn fullDuplexCallbackUnlinkedDevices() void {
     };
 
     const capture = audio_card.getCaptureAt(0) catch |err| {
-        log.err("Failed to get capture port: {!}", .{err});
+        log.err("Failed to get capture port: {t}", .{err});
         return;
     };
 
-    std.debug.print("Capturing with: {s}", .{capture});
+    std.debug.print("Capturing with: {f}", .{capture});
 
     const samples_rate = capture.selected_settings.sample_rate orelse {
         log.err("Failed to get capture sample rate", .{});
@@ -326,30 +326,30 @@ pub fn fullDuplexCallbackUnlinkedDevices() void {
             .buffer_cycles = 40,
         },
     }) catch |err| {
-        log.err("Failed to init device: {!}", .{err});
+        log.err("Failed to init device: {t}", .{err});
         return;
     };
 
     defer {
         dev.deinit() catch |err| {
-            log.err("Failed to deinit device: {!}", .{err});
+            log.err("Failed to deinit device: {t}", .{err});
         };
     }
 
     dev.prepare() catch |err| {
-        log.err("Failed to prepare device: {!}", .{err});
+        log.err("Failed to prepare device: {t}", .{err});
         return;
     };
 
     var ctx = FullDuplexContext{};
 
     dev.start(&ctx, @field(FullDuplexContext, "callback")) catch |err| {
-        log.err("Failed to start device: {!}", .{err});
+        log.err("Failed to start device: {t}", .{err});
     };
 }
 
 pub fn printingHardwareInfo() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() != .ok) std.debug.print("Failed to deinit allocator.", .{});
 
     const allocator = gpa.allocator();
@@ -364,11 +364,11 @@ pub fn printingHardwareInfo() void {
 
     // To have an overview of the available audio cards, ports as well as their supported settings
     // you can just print the hardware object
-    std.debug.print("{s}", .{hardware});
+    std.debug.print("{f}", .{hardware});
 }
 
 pub fn findAndPrintCardPortInfo(card_name: []const u8) void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() != .ok) std.debug.print("Failed to deinit allocator.", .{});
 
     const allocator = gpa.allocator();
@@ -384,7 +384,7 @@ pub fn findAndPrintCardPortInfo(card_name: []const u8) void {
     const found_card = hardware.findCardBy(.name, card_name);
 
     if (found_card) |card| {
-        std.debug.print("{s}", .{card});
+        std.debug.print("{f}", .{card});
         return;
     }
 
@@ -392,7 +392,7 @@ pub fn findAndPrintCardPortInfo(card_name: []const u8) void {
 }
 
 pub fn findingCardAndPortBy() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() != .ok) std.debug.print("Failed to deinit allocator.", .{});
 
     const allocator = gpa.allocator();
@@ -410,7 +410,7 @@ pub fn findingCardAndPortBy() void {
         // webcams don't have playback ports, generally :)
         const found_port = card.findCaptureBy(.name, "USB");
 
-        std.debug.print("{?}", .{found_port});
+        std.debug.print("{?f}", .{found_port});
         return;
     }
 
@@ -418,7 +418,7 @@ pub fn findingCardAndPortBy() void {
 }
 
 pub fn selectAudioPortCounterpart() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() != .ok) log.err("Failed to deinit allocator.", .{});
 
     const allocator = gpa.allocator();
@@ -449,13 +449,13 @@ pub fn selectAudioPortCounterpart() void {
         return;
     };
 
-    std.debug.print("SELECTED PORT:\n{s}", .{port});
-    std.debug.print("COUNTERPART PORT:\n{s}", .{counterpart});
+    std.debug.print("SELECTED PORT:\n{f}", .{port});
+    std.debug.print("COUNTERPART PORT:\n{f}", .{counterpart});
 }
 
 //This example shows how to use the hardware object to initialize a device
 pub fn usingHardwareToInitDevice() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() != .ok) log.err("Failed to deinit allocator.", .{});
 
     const allocator = gpa.allocator();
@@ -471,7 +471,7 @@ pub fn usingHardwareToInitDevice() void {
     // To have an overview of the available audio cards, ports as well as their supported settings
     // you can just print the hardware object
     //
-    //  std.debug.print("{s}", .{hardware});
+    //  std.debug.print("{f}", .{hardware});
     //
     //  For every card and port there is a hint on how to select an specific card or port. You can use those instead selecting by name
     //     ├──  Select Methods:
@@ -539,7 +539,7 @@ pub fn usingHardwareToInitDevice() void {
     };
 
     //printing the devices format for an overview
-    std.debug.print("{s}", .{device});
+    std.debug.print("{f}", .{device});
 
     // Prepare the device for playback with the minimum available strategy
     device.prepare() catch |err| {
@@ -550,7 +550,7 @@ pub fn usingHardwareToInitDevice() void {
 
 // This example shows how to manually use your hardware information to initialize a device
 pub fn manuallyInitializingDevice() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer if (gpa.deinit() != .ok) std.debug.print("Failed to deinit allocator.", .{});
 
     const allocator = gpa.allocator();
@@ -594,7 +594,7 @@ pub fn manuallyInitializingDevice() void {
         std.debug.print("Failed to deinit device: {}", .{err});
     };
 
-    std.debug.print("{s}", .{device});
+    std.debug.print("{f}", .{device});
 
     device.prepare() catch |err| {
         std.debug.print("Failed to prepare device: {}", .{err});

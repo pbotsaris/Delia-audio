@@ -542,10 +542,7 @@ pub fn HalfDuplexDevice(ContextType: type, comptime comptime_opts: DeviceComptim
             }
         }
 
-        pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-            _ = fmt;
-            _ = options;
-
+        pub fn format(self: Self, writer: *std.Io.Writer) std.Io.Writer.Error!void {
             try writer.print("\nDevice\n", .{});
             try writer.print("  Stream Type:        {s}\n", .{@tagName(self.stream_type)});
             try writer.print("  Access Type:        {s}\n", .{@tagName(self.access_type)});
@@ -556,7 +553,7 @@ pub fn HalfDuplexDevice(ContextType: type, comptime comptime_opts: DeviceComptim
             try writer.print("  Timeout:            {d}ms\n", .{if (self.timeout < 0) 0 else self.timeout});
             try writer.print("  Open Mode:          {s}\n", .{@tagName(self.mode)});
             try writer.print("  Transfer Buff Size: {d} bytes\n", .{self.transfer_buffer.len});
-            try writer.print("{s}\n", .{self.audio_format});
+            try writer.print("{f}\n", .{self.audio_format});
         }
 
         pub fn deinit(self: *Self) !void {
@@ -826,7 +823,7 @@ fn HalfDuplexAudioLoop(ContextType: type, comptime comptime_opts: DeviceComptime
 
         fn mmapTransfer(self: *Self) !void {
             const buffer_size: c_ulong = @intFromEnum(self.device.buffer_size);
-            var maybe_areas: ?*c_alsa.snd_pcm_channel_area_t = null;
+            var maybe_areas: ?*const c_alsa.snd_pcm_channel_area_t = null;
             var stopped: bool = true;
             var zero_transfers: usize = 0;
 
@@ -964,7 +961,7 @@ fn HalfDuplexAudioLoop(ContextType: type, comptime comptime_opts: DeviceComptime
                             return AudioLoopError.timeout;
                         }
 
-                        std.time.sleep(sleep);
+                        utils.sleepNs(sleep);
 
                         sleep = @intFromFloat(@as(f32, @floatFromInt(sleep)) * SLEEP_INCREMENT);
                         retries -= 1;
@@ -1039,8 +1036,8 @@ fn FullDuplexAudioLoop(ContextType: type, comptime_opts: DeviceComptimeOptions) 
         playback_stopped: bool = false,
         capture_stopped: bool = false,
         zero_transfers: ZeroTransfers = ZeroTransfers{},
-        maybe_playback_areas: ?*c_alsa.snd_pcm_channel_area_t = null,
-        maybe_capture_areas: ?*c_alsa.snd_pcm_channel_area_t = null,
+        maybe_playback_areas: ?*const c_alsa.snd_pcm_channel_area_t = null,
+        maybe_capture_areas: ?*const c_alsa.snd_pcm_channel_area_t = null,
         total_frames: i64 = 0,
 
         pub fn init(device: Device, ctx: *ContextType, callback: AudioCallback()) Self {
@@ -1323,7 +1320,7 @@ fn FullDuplexAudioLoop(ContextType: type, comptime_opts: DeviceComptimeOptions) 
         fn silencePlayback(self: *Self) !void {
             const buffer_size: c_ulong = @intFromEnum(self.device.playback_device.buffer_size);
 
-            for (self.device.playback_device.n_periods) |_| {
+            for (0..self.device.playback_device.n_periods) |_| {
                 var offset: c_ulong = 0;
                 var expected_transfer: c_ulong = buffer_size;
 
@@ -1555,7 +1552,7 @@ fn FullDuplexAudioLoop(ContextType: type, comptime_opts: DeviceComptimeOptions) 
                             return AudioLoopError.timeout;
                         }
 
-                        std.time.sleep(sleep);
+                        utils.sleepNs(sleep);
 
                         sleep = @intFromFloat(@as(f32, @floatFromInt(sleep)) * SLEEP_INCREMENT);
                         retries -= 1;
@@ -1587,7 +1584,7 @@ fn FullDuplexAudioLoop(ContextType: type, comptime_opts: DeviceComptimeOptions) 
 
 fn AlignmentVerifier(ContextType: type, comptime comptime_opts: DeviceComptimeOptions) type {
     return struct {
-        pub inline fn verifyAlignment(_: @This(), device: HalfDuplexDevice(ContextType, comptime_opts), area: *c_alsa.snd_pcm_channel_area_t) !void {
+        pub inline fn verifyAlignment(_: @This(), device: HalfDuplexDevice(ContextType, comptime_opts), area: *const c_alsa.snd_pcm_channel_area_t) !void {
             if (area.first % BYTE_ALIGN != 0) {
                 log.err("Area.first not byte(8) aligned. area.first == {d}", .{area.first});
                 return AudioLoopError.audio_buffer_nonalignment;
