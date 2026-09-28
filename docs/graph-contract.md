@@ -2,9 +2,10 @@
 
 **Status:** section 2 is implemented in `src/graph/nodes/node.zig`, `gain.zig` and
 `oscillator.zig` (milestone M3, `docs/DELIA_REFACTOR_PLAN.md` sections 4.5 and 7). Sections 3
-to 5 are not implemented yet. **Sketch:** `docs/examples/graph_node_sketch.zig` was the design
-sketch for section 2; the code in `src/graph/nodes/` is authoritative. The builder, compiler and
-plan get their own sketch next.
+to 5 are not implemented yet. **Sketches:** `docs/examples/graph_node_sketch.zig` was the design
+sketch for section 2; the code in `src/graph/nodes/` is authoritative.
+`docs/examples/graph_plan_sketch.zig` is the sketch for sections 3 to 5 and passes the
+acceptance list in section 7 against stand-in buffers and nodes.
 
 Builds on `docs/buffer-contract.md`. Section 8 of that document (node I/O) is the node's side of
 this contract and is not repeated here.
@@ -74,11 +75,13 @@ GraphBuilder(T)
     deinit()                                   destroys every node
 ```
 
-- Edges store port numbers on both ends even though `connect` only exposes port 0. Multi-port
-  nodes need a `connectPorts` later, not a new data model.
+- Edges store port numbers on both ends. `connect` is `connectPorts(from, 0, to, 0)`; multi-port
+  nodes use `connectPorts` directly.
 - The graph output is not a node. It behaves like one input port on a virtual sink so fan-in into
   it follows the same rule as fan-in into any port.
-- The builder validates handle bounds and nothing else. Structure is validated at compile.
+- The builder rejects `invalid_handle` and `port_out_of_range` at the call site, because a node's
+  `ports` is known the moment it is added. Structure (connectivity, cycles) is validated at
+  compile.
 - The builder owns the node heap copies. A plan borrows them. The builder outlives every plan
   compiled from it and is not edited while a plan is rendering: stop, edit, recompile, restart.
   Node state (oscillator phase, filter history) lives in the node struct, so recompiling after an
@@ -99,7 +102,7 @@ Rejected, with nothing allocated on return:
 | an input port has no producer | `unconnected_input` |
 | `connectOutput` was never called | `no_output` |
 | the graph has a cycle | `cycle_detected` |
-| an edge names a port a node does not have | `port_out_of_range` |
+| a node's `prepare` fails | its `NodeError` |
 
 Rules:
 

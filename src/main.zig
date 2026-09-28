@@ -50,6 +50,7 @@ test {
     _ = @import("core/buffer/buffer.zig");
     _ = @import("utils/utils.zig");
     _ = @import("graph/graph.zig");
+    _ = @import("graph/builder.zig");
 
     // examples have no tests; reference them so they keep compiling
     std.testing.refAllDecls(backends.alsa.examples);
