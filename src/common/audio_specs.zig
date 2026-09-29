@@ -49,6 +49,10 @@ pub const SampleRate = enum(usize) {
     pub inline fn toFloat(self: Self, T: type) T {
         return @floatFromInt(@as(usize, @intFromEnum(self)));
     }
+
+    pub inline fn toUsize(self: Self) usize {
+        return @as(usize, @intFromEnum(self));
+    }
 };
 
 test "AudioSpecs" {

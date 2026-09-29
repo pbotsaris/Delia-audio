@@ -14,7 +14,7 @@ Delia is a Zig DSP library and realtime audio runtime, built as a learning proje
 - Initial scope: planar `f32` graph audio, single render thread, acyclic graph, declared max block size, one clock domain. Reject unsupported configs explicitly.
 - Linux backend is direct ALSA. JACK or PipeWire interop is optional future work, not a dependency. A Delia-owned server comes later, on top of the engine.
 - Milestones M0..M7 (baseline, buffer contracts, planned FFT, offline graph slice, backend integration, control/plan replacement, measured optimization, server). The immediate next work is **ownership and execution contracts**, not SIMD.
-- Working order is M1, M3, M2. M0 and M1 are done; the next milestone is M3 (offline graph slice on the new buffer contract).
+- Working order is M1, M3, M2. M0, M1 and M3 are done; the next milestone is M2 (planned scalar FFT), then M4 (ALSA on the new graph).
 
 ## Toolchain
 
@@ -28,7 +28,7 @@ The `vendor/alsa` submodule (alsa-lib, built statically) must be present (`git s
 
 ```sh
 zig build                          # first run configures+makes vendor/alsa (needs autotools/make)
-zig build run                      # runs src/main.zig (currently a scratch entry point that calls one example)
+zig build run                      # runs src/main.zig (scratch entry point; currently the offline graph example)
 zig build check                    # compile-only; this is what zls build-on-save uses (zls.json)
 zig build test                     # all tests
 zig build test -Dtest-filter=FFT   # only tests whose name contains the string (repeatable)
@@ -37,13 +37,13 @@ zig build bench                    # zbench microbenchmarks in src/benchmarks.zi
 
 `run`, `check`, and `test` share one root module (`src/main.zig`) in `build.zig`, so ALSA is wired once. ALSA is linked statically from `vendor/alsa/src/.libs/libasound.a`, built on first `zig build` from the submodule. zBench is pinned to v0.13.0, the last release that targets Zig 0.16.
 
-Tests are aggregated through explicit `test { _ = module; }` blocks: `src/main.zig` references the aggregators (`src/dsp/dsp.zig`, `src/graph/graph.zig`, `src/graph/nodes/nodes.zig`, `src/backends/backends.zig`, `src/backends/alsa/alsa.zig`, `src/core/buffer/buffer.zig`), and each aggregator references its files. 0.16 has no `refAllDeclsRecursive`, so a new file only gets tested once it is added to its aggregator's `test` block. Function bodies are analysed lazily: code that no test or entry point calls is not compiled. `main.zig` uses `std.testing.refAllDecls` on the example namespaces to keep them compiling. `src/dsp/filters/` is not wired into `dsp.zig` yet.
+Tests are aggregated through explicit `test { _ = module; }` blocks: `src/main.zig` references the aggregators (`src/dsp/dsp.zig`, `src/graph/graph.zig`, `src/legacy/graph/graph.zig`, `src/backends/backends.zig`, `src/backends/alsa/alsa.zig`, `src/core/buffer/buffer.zig`), and each aggregator references its files. 0.16 has no `refAllDeclsRecursive`, so a new file only gets tested once it is added to its aggregator's `test` block. Function bodies are analysed lazily: code that no test or entry point calls is not compiled. `main.zig` uses `std.testing.refAllDecls` on the example namespaces to keep them compiling. `src/dsp/filters/` is not wired into `dsp.zig` yet.
 
 Run a single file's tests directly. Pure Zig files need nothing extra:
 
 ```sh
 zig test src/dsp/transforms.zig
-zig test src/graph/graph.zig --test-filter "TopologyQueue"
+zig test src/core/buffer/buffer.zig --test-filter "AudioBlock"
 ```
 
 Files that `@cImport` ALSA need the include path, the static lib, and libc:
@@ -52,7 +52,7 @@ Files that `@cImport` ALSA need the include path, the static lib, and libc:
 zig test src/backends/alsa/driver.zig -I vendor/alsa/include vendor/alsa/src/.libs/libasound.a -lc
 ```
 
-`zig test` makes the given file the module root, so files with `../` imports (most of `graph/` and `backends/alsa/`) must be tested through a root under `src/` or via `zig build test`.
+`zig test` makes the given file the module root, so files with `../` imports (all of `graph/`, `legacy/` and most of `backends/alsa/`) must be tested through a root under `src/` or via `zig build test -Dtest-filter=...`. The sketches in `docs/examples/` are self-contained and run with `zig test docs/examples/<file>.zig`.
 
 `zig ast-check <file>` checks one file for syntax and AST-level errors with no build wiring. Use it as the first pass on any file you touch; it does not catch std API mismatches.
 
@@ -62,15 +62,18 @@ zig test src/backends/alsa/driver.zig -I vendor/alsa/include vendor/alsa/src/.li
 
 ## Architecture
 
-Three layers, wired together only at the top (`src/examples.zig` shows the full path):
+Three layers, wired together only at the top:
 
 ```
 dsp/        allocating analysis kernels (FFT, waves, filters, complex storage)
-graph/      Graph -> TopologyQueue -> Scheduler, with a UniformChannelViews buffer pool
+graph/      GraphBuilder -> Compiler -> ExecutionPlan, on core/buffer (contract: docs/graph-contract.md)
 backends/   ALSA devices; comptime-specialized on a user Context type + callback
-common/     audio_buffer (old views + pool) and audio_specs (BufferSize/BlockSize/SampleRate enums)
-core/       buffer/ (new buffer contract); nothing else imports it yet
+core/       buffer/ (buffer contract: docs/buffer-contract.md); used by graph/
+common/     audio_specs (BufferSize/BlockSize/SampleRate enums) and audio_buffer (old views + pool)
+legacy/     graph/: the old Graph -> TopologyQueue -> Scheduler, frozen until M4
 ```
+
+`src/graph/examples.zig` shows the offline path (build, compile, render, interleave). `src/examples.zig` is ALSA playback on the legacy scheduler and is the only non-test user of `legacy/`. Nothing new imports `legacy/`.
 
 ### Comptime Context pattern (backends)
 
@@ -80,20 +83,24 @@ ALSA device options are negotiated at `init`/`prepare` (hardware buffer = `buffe
 
 ### Graph pipeline
 
-- `Graph(T)` holds `GenericNode` type-erased nodes (vtable: `name/prepare/process/destroy`) and edges. `addNode` copies the node struct onto the heap. Only `f32`/`f64` are accepted (compile error otherwise).
-- `topologicalSortAlloc` produces a `TopologyQueue` (Kahn's algorithm on stack arrays bounded by `GraphOptions.max_static_size`, default 1024; cycles return `cycle_detected`).
-- `TopologyQueue.analyzeBufferRequirementsAlloc` does reference-counted buffer assignment: a producer's buffer is freed for reuse once its last consumer runs, so a parent shares a buffer with its last-connected child. Tests in `graph.zig` pin exact buffer indices; keep them when touching this.
-- `Scheduler(T)` owns the graph, the queue, and the `UniformChannelViews` pool. `prepare` calls each node's `prepare`, sorts, analyzes, and builds the new queue and pool before replacing the old ones; the pool is reused only when view count, channel count, block size and access all still fit. `processGraph` is explicitly WIP: it still polls node status each block and copies parent views into child views on buffer mismatch. The plan replaces this with a compiled flat operation list executed without status checks or topology discovery.
+Three phases in three files, plus the node contract. Import through `src/graph/graph.zig`.
 
-Nodes implement `prepare(*Self, PrepareContext)`, `process(*Self, ProcessContext)`, `name`. `ProcessContext` carries a borrowed `UnmanagedChannelView`; nodes never allocate in `process`.
+- `node.zig`: `Node(T)` is the type-erased wrapper (`ptr`, `vtable`, `ports`, `name`). A node is a struct with `pub const ports: Ports`, `pub const name: []const u8`, `prepare(*Self, PrepareContext) NodeError!void` and `process(*Self, ProcessContext) void`; `Node(T).init` checks all of it at comptime. `ProcessContext` has separate `inputs` and `outputs`, one block per port. Nodes never allocate in `process` and carry no status: order is the compiler's decision. Implementations live in `nodes/` (`Gain`, `Oscillator`).
+- `builder.zig`: `GraphBuilder(T)` is mutable and editing-time only. `addNode` heap-copies the struct; `connect`, `connectPorts` and `connectOutput` reject `invalid_handle` and `port_out_of_range` at the call site. The graph output is not a node. The builder owns the nodes and outlives every plan compiled from it.
+- `compiler.zig`: `Compiler(T).compile(allocator, &builder, options)` validates (`no_output`, `disconnected_input`, `cycle_detected`), sorts (Kahn, lowest ready index first, so the op list is deterministic), assigns one pool slot per output port plus one mix slot per fan-in port, prepares nodes, and emits a flat `Op` list. It is transactional: intermediate tables live in an arena, and a failure leaves nothing allocated.
+- `plan.zig`: `ExecutionPlan(T).render(out)` checks the caller's block once, then runs `clear`, `accumulate`, `process` and `copy_out` ops over the pool. No allocation, status checks or lookups. Block-op errors are `catch unreachable` there because the compiler proved the shapes.
+
+Tests in `compiler.zig` pin exact slot counts and op lists; keep them when touching slot assignment. Every port carries the graph's channel count. Slot reuse and in-place execution are not implemented (open questions in the contract). Replacing a plan means stop, edit, recompile, restart.
+
+`src/legacy/graph/` holds the previous implementation (`Graph`, `TopologyQueue`, `Scheduler` on `UniformChannelViews`). Do not add features to it; it is deleted when the ALSA callback runs on `ExecutionPlan.render`.
 
 ### Buffers
 
-Two implementations coexist until the graph migrates in M3.
+Two implementations coexist until the ALSA backend migrates in M4.
 
-**New (`core/buffer/`, contract in `docs/buffer-contract.md`):** import only `core/buffer/buffer.zig`. `AudioBlock(T)` and `ConstAudioBlock(T)` are borrowed planar views (`samples`, `channel_count`, `frame_count`, `channel_stride`) generated from one private `Block(T, mutability)` in `block.zig`; `channel(c)` returns a slice of the active frames. `OwnedAudioBuffer` and `AudioBufferPool` (`storage.zig`) own 64-byte-aligned storage, take the allocator in `init`/`deinit` without storing it, and lend blocks through `borrowBlock`/`borrowSlot`. `ops.zig` has `clear`, `copy`, `accumulate`, `interleave`, `deinterleave`; they return `shape_mismatch` or `forbidden_overlap` and write nothing on failure. `ProcessContext(T)` has separate `inputs` and `outputs`. Interleaved audio exists only as packed slices at device/file boundaries.
+**New (`core/buffer/`, contract in `docs/buffer-contract.md`):** import only `core/buffer/buffer.zig`. `AudioBlock(T)` and `ConstAudioBlock(T)` are borrowed planar views (`samples`, `channel_count`, `frame_count`, `channel_stride`) generated from one private `Block(T, mutability)` in `block.zig`; `channel(c)` returns a slice of the active frames. `OwnedAudioBuffer` and `AudioBufferPool` (`storage.zig`) own 64-byte-aligned storage, take the allocator in `init`/`deinit` without storing it, and lend blocks through `borrowBlock`/`borrowSlot`. `ops.zig` has `clear`, `copy`, `accumulate`, `interleave`, `deinterleave`; they return `shape_mismatch` or `forbidden_overlap` and write nothing on failure. `ProcessContext` is defined on `Node(T)` in `src/graph/node.zig`, not here. Interleaved audio exists only as packed slices at device/file boundaries.
 
-**Old (`common/audio_buffer.zig`):** `ChannelView` owns storage, `UnmanagedChannelView` borrows it, `UniformChannelViews` is one contiguous pool exposing N views. Access is interleaved or non-interleaved via a runtime tag; `block_size` doubles as physical stride. Still used by the graph and scheduler. Do not add features to it.
+**Old (`common/audio_buffer.zig`):** `ChannelView` owns storage, `UnmanagedChannelView` borrows it, `UniformChannelViews` is one contiguous pool exposing N views. Access is interleaved or non-interleaved via a runtime tag; `block_size` doubles as physical stride. Still used by the legacy graph and scheduler. Do not add features to it.
 
 ### DSP
 

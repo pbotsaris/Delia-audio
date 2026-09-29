@@ -3,6 +3,7 @@ pub const Node = @import("node.zig").Node;
 pub const builder = @import("builder.zig");
 pub const plan = @import("plan.zig");
 pub const compiler = @import("compiler.zig");
+pub const examples = @import("examples.zig");
 
 test {
     _ = @import("nodes/nodes.zig");
@@ -10,6 +11,7 @@ test {
     _ = builder;
     _ = plan;
     _ = compiler;
+    _ = examples;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +92,7 @@ test "plan - hand-built Oscillator -> Gain -> copy_out renders one block" {
             .in = in_scratch,
             .out = out_scratch,
         },
+        .sample_rate = 48000,
         .max_frames = .blk_64,
         .channel_count = 2,
     };

@@ -134,6 +134,9 @@ Op
 ExecutionPlan(T).render(out: AudioBlock(T)) error{shape_mismatch}!void
 ```
 
+- The plan records what it was prepared for: `sample_rate`, `max_frames`, `channel_count`.
+  `max_frames` is a capacity. A caller renders any total length as a sequence of blocks of
+  at most `max_frames`; the total does not need to be a multiple of it.
 - One check at entry: `out.channel_count == channel_count` and `out.frame_count <= max_frames`.
   Otherwise `shape_mismatch` and nothing is written.
 - `out.frame_count == 0` returns without calling any node.

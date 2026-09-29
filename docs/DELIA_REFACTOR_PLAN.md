@@ -17,6 +17,8 @@ This report consolidates our discussion and adds a targeted inspection of the pu
 
 **M1 complete (27 September 2026):** the buffer contract is implemented in `src/core/buffer/` and wired into `zig build test` (137/137 passing, 23 of them in `src/core/buffer/buffer.zig`). All 14 acceptance items in the contract have a test. `ProcessContext` lives in `src/core/buffer/buffer.zig`. Nothing uses the new types yet: `src/common/audio_buffer.zig`, the graph, and the ALSA backend are unchanged and migrate in M3 and M4.
 
+**M3 complete (29 September 2026):** the graph contract is `docs/graph-contract.md`, implemented in `src/graph/` (`node.zig`, `builder.zig`, `compiler.zig`, `plan.zig`, `nodes/`) and wired into `zig build test` (173/173 passing). All 11 acceptance items in the contract have a test. `src/graph/examples.zig` renders a fan-in graph offline and interleaves it at the boundary; `zig build run` runs it. `ProcessContext` moved from `core/buffer` to `Node(T)`. The old graph and scheduler moved unchanged to `src/legacy/graph/`; `src/examples.zig` (ALSA playback) still uses them and migrates in M4. Buffer reuse and in-place execution are deferred: the compiler assigns one slot per output port.
+
 ## Contents
 
 1. [Project direction and scope](#1-project-direction-and-scope)
@@ -492,14 +494,14 @@ Dependencies should point toward the core. Numerical kernels must not import the
 
 Proceed by acceptance criteria, not calendar promises. FFT and graph development can diverge after the buffer contract; the initial sine/gain graph does not depend on FFT completion.
 
-**Order: M1, then M3, then M2.** Milestone numbers are identifiers, not the sequence. The offline graph slice is the first real consumer of the buffer contract, so it exposes contract mistakes while they are still cheap to fix. The FFT is independent of both and can follow. **M0 is complete** apart from tagging the reference point, and **M1 is complete** (see the notes at the top). The next milestone is M3.
+**Order: M1, then M3, then M2.** Milestone numbers are identifiers, not the sequence. The offline graph slice is the first real consumer of the buffer contract, so it exposes contract mistakes while they are still cheap to fix. The FFT is independent of both and can follow. **M0, M1 and M3 are complete** (see the notes at the top). The next milestone is M2.
 
 | Milestone | Implementation scope | Exit criteria |
 |---|---|---|
 | M0: Reproducible baseline (done) | Pin repository/compiler/dependencies; inventory tests; preserve a reference branch | A fresh checkout has documented build/test commands; failures are recorded, not concealed |
 | M1: Buffer contracts (done) | Owned/borrowed types, planar blocks, stride-aware sub-blocks, conversion helpers, node I/O contract | Ownership, bounds, layout, partial-block, and overlap tests pass |
 | M2: Planned scalar FFT | Plan/workspace lifecycle; scalar radix-2; explicit normalization; analysis adapter | Independent forward/inverse tests pass; repeated execution performs no allocation; no shared mutable scratch |
-| M3: Offline graph slice | Sine -> Gain -> Output; then fan-out and explicit mixer; flat execution | Deterministic offline output; repeated blocks correct; all active outputs written; no render allocations |
+| M3: Offline graph slice (done) | Sine -> Gain -> Output; then fan-out and explicit mixer; flat execution | Deterministic offline output; repeated blocks correct; all active outputs written; no render allocations |
 | M4: Backend integration | ALSA transfer/lifecycle repairs and the same graph callback; CoreAudio may follow independently | Fault-injection tests plus documented full-duplex hardware run; clean start/stop and bounded recovery policy |
 | M5: Control and plan replacement | Bounded parameter events; smoothing; publication and off-thread retirement | Overflow behavior, timing, lifetime stress tests, and audible-transition policy validated |
 | M6: Measured optimization | Better stages/radices, SIMD experiments, optional size specialization | Reproducible end-to-end improvements without correctness or realtime regressions |
@@ -585,7 +587,10 @@ Listed in working order (M1, M3, M2, M4).
 - [x] Implement `OwnedAudioBuffer` and `AudioBufferPool`, then the block operations (`clear`, `copy`, `accumulate`, `interleave`, `deinterleave`).
 - [x] Add `ProcessContext` with separate inputs and outputs, tested with a gain node and a source node.
 - [x] Add regression tests for the scheduler's inverted buffer-reuse branch and for mismatched copy shapes in the old views, before the scheduler migrates. Both were fixed: `Scheduler.prepare` builds the new queue and pool before replacing the old ones, and `copyFrom` returns `shape_mismatch`.
-- [ ] Build the offline Sine -> Gain -> Output slice on the new node I/O contract; add fan-out/mixing before optimizing buffer reuse.
+- [x] Write `docs/graph-contract.md`: node interface, builder, compile rules, render rules, ownership.
+- [x] Implement the node interface (`Node(T)`, `Ports`) with `Gain` and `Oscillator`, and move `ProcessContext` out of `core/buffer`.
+- [x] Build the offline Sine -> Gain -> Output slice on the new node I/O contract; add fan-out/mixing before optimizing buffer reuse. Done: `GraphBuilder`, `Compiler(T).compile`, `ExecutionPlan.render`, offline example in `src/graph/examples.zig`.
+- [ ] Add buffer slot reuse to the compiler (lifetime analysis), using the pinned op-list tests as the comparison. Optional before M4.
 - [ ] Add a regression test for `ComplexList` logical length versus capacity.
 - [ ] Write `docs/fft-contract.md`: direction, normalization, ordering, supported lengths, aliasing, workspace, and ownership.
 - [ ] Extract an independent reference DFT and build one planned scalar radix-2 implementation.

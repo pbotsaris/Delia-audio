@@ -6,7 +6,6 @@ const ex = @import("examples.zig");
 
 const backends = @import("backends/backends.zig");
 
-
 pub const std_options: std.Options = .{
     .log_level = .debug,
     .logFn = @import("logging.zig").logFn,
@@ -27,6 +26,8 @@ pub fn main() !void {
     //    examplePlaybackAndGraph() catch |err| {
     //        log.err("Failed to run example: {!}", .{err});
     //    };
+
+    graph.examples.offlineFanIn();
 
     // backends.alsa.examples.printingHardwareInfo();
     // backends.alsa.examples.findAndPrintCardPortInfo("USB");
@@ -49,8 +50,6 @@ test {
     _ = @import("common/audio_buffer.zig");
     _ = @import("core/buffer/buffer.zig");
     _ = @import("utils/utils.zig");
-    _ = @import("graph/graph.zig");
-    _ = @import("graph/builder.zig");
 
     // examples have no tests; reference them so they keep compiling
     std.testing.refAllDecls(backends.alsa.examples);

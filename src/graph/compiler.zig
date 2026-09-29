@@ -368,6 +368,7 @@ fn Compilation(comptime T: type) type {
                 .slot_refs = self.slot.refs,
                 .pool = pool,
                 .scratch = .{ .in = scratch_ins, .out = scratch_outs },
+                .sample_rate = self.options.sample_rate,
                 .max_frames = self.options.max_frames,
                 .channel_count = self.options.channel_count,
             };
@@ -406,6 +407,7 @@ fn expectScaledSine(scale: f32, first_frame: usize, actual: []const f32) !void {
 fn buildChain(builder: *TestBuilder) !void {
     const osc = try builder.addNode(Oscillator.init(.sine, 440, 1));
     const gain = try builder.addNode(Gain{ .gain = 0.5 });
+
     try builder.connect(osc, gain);
     try builder.connectOutput(gain);
 }
@@ -414,6 +416,7 @@ fn buildFanIn(builder: *TestBuilder) !void {
     const osc = try builder.addNode(Oscillator.init(.sine, 440, 1));
     const quarter = try builder.addNode(Gain{ .gain = 0.25 });
     const half = try builder.addNode(Gain{ .gain = 0.5 });
+
     try builder.connect(osc, quarter);
     try builder.connect(osc, half);
     try builder.connectOutput(quarter);
@@ -556,6 +559,7 @@ test "compile - diamond mixes into the consumer's input port" {
     const quarter = try builder.addNode(Gain{ .gain = 0.25 });
     const half = try builder.addNode(Gain{ .gain = 0.5 });
     const double = try builder.addNode(Gain{ .gain = 2 });
+
     try builder.connect(osc, quarter);
     try builder.connect(osc, half);
     try builder.connect(quarter, double);
@@ -574,6 +578,7 @@ test "compile - diamond mixes into the consumer's input port" {
     var owned = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, 2, 64);
     defer owned.deinit(testing.allocator);
     const out = try owned.borrowBlock(64);
+
     try compiled.render(out);
 
     try expectScaledSine(1.5, 0, out.channel(0));
@@ -632,6 +637,7 @@ test "compile - render rejects wrong channel count and oversized block" {
 
 fn buildCompileRender(allocator: std.mem.Allocator) !void {
     var builder = TestBuilder.init(allocator);
+
     defer builder.deinit();
     try buildFanIn(&builder);
 
