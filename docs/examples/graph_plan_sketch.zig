@@ -171,7 +171,7 @@ pub fn Node(comptime T: type) type {
 
 // Stand-ins for nodes/gain.zig and nodes/oscillator.zig, used by the tests.
 
-fn Gain(comptime T: type) type {
+pub fn TestGain(comptime T: type) type {
     return struct {
         gain: T,
         pub const ports: Ports = .{ .inputs = 1, .outputs = 1 };
@@ -185,7 +185,7 @@ fn Gain(comptime T: type) type {
     };
 }
 
-fn Sine(comptime T: type) type {
+pub fn TestSine(comptime T: type) type {
     return struct {
         freq: T,
         phase: T = 0,
@@ -593,8 +593,8 @@ const OutBuffer = struct {
 };
 
 fn buildChain(builder: *GraphBuilder(f32)) !void {
-    const sine = try builder.addNode(Sine(f32){ .freq = 440 });
-    const gain = try builder.addNode(Gain(f32){ .gain = 0.5 });
+    const sine = try builder.addNode(TestSine(f32){ .freq = 440 });
+    const gain = try builder.addNode(TestGain(f32){ .gain = 0.5 });
     try builder.connect(sine, gain);
     try builder.connectOutput(gain);
 }
@@ -703,9 +703,9 @@ test "fan-out and fan-in: Sine -> Gain(0.25), Sine -> Gain(0.5), both -> output"
     var builder = GraphBuilder(f32).init(testing.allocator);
     defer builder.deinit();
 
-    const sine = try builder.addNode(Sine(f32){ .freq = 440 });
-    const a = try builder.addNode(Gain(f32){ .gain = 0.25 });
-    const b = try builder.addNode(Gain(f32){ .gain = 0.5 });
+    const sine = try builder.addNode(TestSine(f32){ .freq = 440 });
+    const a = try builder.addNode(TestGain(f32){ .gain = 0.25 });
+    const b = try builder.addNode(TestGain(f32){ .gain = 0.5 });
     try builder.connect(sine, a);
     try builder.connect(sine, b);
     try builder.connectOutput(a);
@@ -733,10 +733,10 @@ test "diamond: Sine -> A, Sine -> B, A -> C, B -> C, C -> output" {
     var builder = GraphBuilder(f32).init(testing.allocator);
     defer builder.deinit();
 
-    const sine = try builder.addNode(Sine(f32){ .freq = 440 });
-    const a = try builder.addNode(Gain(f32){ .gain = 0.25 });
-    const b = try builder.addNode(Gain(f32){ .gain = 0.5 });
-    const c = try builder.addNode(Gain(f32){ .gain = 2 });
+    const sine = try builder.addNode(TestSine(f32){ .freq = 440 });
+    const a = try builder.addNode(TestGain(f32){ .gain = 0.25 });
+    const b = try builder.addNode(TestGain(f32){ .gain = 0.5 });
+    const c = try builder.addNode(TestGain(f32){ .gain = 2 });
     try builder.connect(sine, a);
     try builder.connect(sine, b);
     try builder.connect(a, c);
@@ -762,8 +762,8 @@ test "order does not depend on insertion order: lowest ready index first" {
     defer builder.deinit();
 
     // added gain first, sine second; sine must still run first
-    const gain = try builder.addNode(Gain(f32){ .gain = 1 });
-    const sine = try builder.addNode(Sine(f32){ .freq = 440 });
+    const gain = try builder.addNode(TestGain(f32){ .gain = 1 });
+    const sine = try builder.addNode(TestSine(f32){ .freq = 440 });
     try builder.connect(sine, gain);
     try builder.connectOutput(gain);
 
@@ -778,8 +778,8 @@ test "compile rejects: unconnected input, no output, cycle; builder rejects bad 
     var builder = GraphBuilder(f32).init(testing.allocator);
     defer builder.deinit();
 
-    const sine = try builder.addNode(Sine(f32){ .freq = 440 });
-    const gain = try builder.addNode(Gain(f32){ .gain = 1 });
+    const sine = try builder.addNode(TestSine(f32){ .freq = 440 });
+    const gain = try builder.addNode(TestGain(f32){ .gain = 1 });
 
     try testing.expectError(error.no_output, compile(f32, testing.allocator, &builder, test_options));
 
@@ -816,9 +816,9 @@ fn buildCompileRender(allocator: std.mem.Allocator) !void {
     var builder = GraphBuilder(f32).init(allocator);
     defer builder.deinit();
 
-    const sine = try builder.addNode(Sine(f32){ .freq = 440 });
-    const a = try builder.addNode(Gain(f32){ .gain = 0.25 });
-    const b = try builder.addNode(Gain(f32){ .gain = 0.5 });
+    const sine = try builder.addNode(TestSine(f32){ .freq = 440 });
+    const a = try builder.addNode(TestGain(f32){ .gain = 0.25 });
+    const b = try builder.addNode(TestGain(f32){ .gain = 0.5 });
     try builder.connect(sine, a);
     try builder.connect(sine, b);
     try builder.connectOutput(a);

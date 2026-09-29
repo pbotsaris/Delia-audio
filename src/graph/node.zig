@@ -3,8 +3,8 @@
 //! and the name are comptime declarations on the implementing struct, checked in `init`.
 
 const std = @import("std");
-const buffer = @import("../../core/buffer/buffer.zig");
-const specs = @import("../../common/audio_specs.zig");
+const buffer = @import("../core/buffer/buffer.zig");
+const specs = @import("../common/audio_specs.zig");
 
 pub const Ports = struct {
     inputs: u8,

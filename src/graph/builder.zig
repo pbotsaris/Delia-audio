@@ -1,8 +1,6 @@
 const std = @import("std");
 const buffer = @import("../core/buffer/buffer.zig");
-const specs = @import("../common/audio_specs.zig");
-const nodes = @import("./nodes/nodes.zig");
-const Node = @import("./nodes/node.zig").Node;
+const Node = @import("node.zig").Node;
 
 pub const Edge = struct {
     pub const PortRef = struct {

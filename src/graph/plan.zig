@@ -1,5 +1,5 @@
 const std = @import("std");
-const Node = @import("nodes/node.zig").Node;
+const Node = @import("node.zig").Node;
 const buffer = @import("../core/buffer/buffer.zig");
 const specs = @import("../common/audio_specs.zig");
 
@@ -37,6 +37,7 @@ pub fn ExecutionPlan(comptime T: type) type {
 
             if (output.channel_count != self.channel_count) return error.shape_mismatch;
             if (frame > self.max_frames.toUsize()) return error.shape_mismatch;
+            if (frame == 0) return;
 
             for (self.ops) |op| switch (op) {
                 .clear => |slot| {
@@ -78,8 +79,8 @@ pub fn ExecutionPlan(comptime T: type) type {
 
         pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
             self.pool.deinit(allocator);
-            allocator.free(self.out_scratch);
-            allocator.free(self.in_scratch);
+            allocator.free(self.scratch.out);
+            allocator.free(self.scratch.in);
             allocator.free(self.slot_refs);
             allocator.free(self.ops);
             allocator.free(self.nodes);

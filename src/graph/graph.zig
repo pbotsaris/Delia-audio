@@ -1,18 +1,20 @@
 pub const nodes = @import("nodes/nodes.zig");
-pub const Node = @import("nodes/node.zig").Node;
+pub const Node = @import("node.zig").Node;
 pub const builder = @import("builder.zig");
 pub const plan = @import("plan.zig");
+pub const compiler = @import("compiler.zig");
 
 test {
     _ = @import("nodes/nodes.zig");
-    _ = @import("nodes/node.zig");
+    _ = @import("node.zig");
     _ = builder;
     _ = plan;
+    _ = compiler;
 }
 
 // ---------------------------------------------------------------------------
-// Smoke tests. They exist to force analysis of builder.zig and plan.zig until the compiler
-// exists; the real acceptance tests (docs/graph-contract.md section 7) go in compiler.zig.
+// Smoke tests for builder.zig and plan.zig on their own. The acceptance tests
+// (docs/graph-contract.md section 7) are in compiler.zig.
 // ---------------------------------------------------------------------------
 
 const std = @import("std");
@@ -60,7 +62,7 @@ test "plan - hand-built Oscillator -> Gain -> copy_out renders one block" {
     // slot 0: oscillator output, slot 1: gain output
     const slot_refs = try allocator.alloc(plan.Slot, 2);
     defer allocator.free(slot_refs);
-            
+
     slot_refs[0] = 0;
     slot_refs[1] = 1;
 

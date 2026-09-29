@@ -1,23 +1,22 @@
 # Graph contract
 
-**Status:** section 2 is implemented in `src/graph/nodes/node.zig`, `gain.zig` and
-`oscillator.zig` (milestone M3, `docs/DELIA_REFACTOR_PLAN.md` sections 4.5 and 7). Sections 3
-to 5 are not implemented yet. **Sketches:** `docs/examples/graph_node_sketch.zig` was the design
-sketch for section 2; the code in `src/graph/nodes/` is authoritative.
-`docs/examples/graph_plan_sketch.zig` is the sketch for sections 3 to 5 and passes the
-acceptance list in section 7 against stand-in buffers and nodes.
+**Status:** implemented in `src/graph/` for milestone M3 (`docs/DELIA_REFACTOR_PLAN.md`,
+sections 4.5 and 7). Every acceptance item in section 7 has a test in `src/graph/compiler.zig`.
+**Sketches:** `docs/examples/graph_node_sketch.zig`, `graph_plan_sketch.zig` and
+`graph_compiler_sketch.zig` preceded the implementation and use stand-in buffers and nodes; the
+code in `src/graph/` is authoritative.
 
 Builds on `docs/buffer-contract.md`. Section 8 of that document (node I/O) is the node's side of
 this contract and is not repeated here.
 
 | File | Contents |
 |---|---|
-| `src/graph/nodes/node.zig` | `Node(T)`, `Ports`, `PrepareContext`, `ProcessContext`, `NodeError` |
+| `src/graph/node.zig` | `Node(T)`, `Ports`, `PrepareContext`, `ProcessContext`, `NodeError` |
 | `src/graph/nodes/gain.zig`, `src/graph/nodes/oscillator.zig` | first nodes on the new interface |
 | `src/graph/nodes/nodes.zig`, `src/graph/graph.zig` | aggregators |
-| `src/graph/builder.zig` (planned) | `GraphBuilder(T)`: nodes, edges, output marker |
-| `src/graph/compiler.zig` (planned) | `compile()`: builder to plan |
-| `src/graph/plan.zig` (planned) | `ExecutionPlan(T)`, `Op`, `render()` |
+| `src/graph/builder.zig` | `GraphBuilder(T)`: nodes, edges, output marker |
+| `src/graph/compiler.zig` | `Compiler(T).compile()`: builder to plan |
+| `src/graph/plan.zig` | `ExecutionPlan(T)`, `Op`, `render()` |
 
 The old graph moved to `src/legacy/graph/` unchanged. `src/examples.zig` still uses its
 scheduler, and `src/main.zig` keeps its tests running, until the ALSA callback runs on
@@ -90,7 +89,7 @@ GraphBuilder(T)
 ## 4. Compile
 
 ```text
-compile(allocator, *GraphBuilder(T), CompileOptions) !ExecutionPlan(T)
+Compiler(T).compile(allocator, *const GraphBuilder(T), CompileOptions(T)) CompileError!ExecutionPlan(T)
 
 CompileOptions  { sample_rate: T, max_frames: specs.BlockSize, channel_count: usize }
 ```
@@ -99,10 +98,11 @@ Rejected, with nothing allocated on return:
 
 | Condition | Error |
 |---|---|
-| an input port has no producer | `unconnected_input` |
+| an input port has no producer | `disconnected_input` |
 | `connectOutput` was never called | `no_output` |
 | the graph has a cycle | `cycle_detected` |
 | a node's `prepare` fails | its `NodeError` |
+| the pool cannot be built (`channel_count == 0`, size overflow) | its `AudioBufferError` |
 
 Rules:
 
@@ -171,16 +171,16 @@ to grow past that, the suspect is the kernel, not the graph.
       the input block is unchanged
 - [x] Oscillator keeps phase across calls: two calls of 8 frames equal one call of 16 on a
       fresh node
-- [ ] chain Sine -> Gain -> output over four blocks matches the reference (prediction above)
-- [ ] partial last block (64, 64, 17) is still continuous
-- [ ] every slot's active frames are overwritten during a render; padding keeps its sentinel
-- [ ] render allocates nothing: allocation count is unchanged after 100 blocks
-- [ ] fan-out and fan-in: Sine -> Gain(0.25), Sine -> Gain(0.5), both -> output gives `0.75 * sin`
-- [ ] diamond: Sine -> A, Sine -> B, A -> C, B -> C, C -> output
-- [ ] compile rejects: unconnected input, no output, cycle, bad port; render rejects: wrong channel
+- [x] chain Sine -> Gain -> output over four blocks matches the reference (prediction above)
+- [x] partial last block (64, 64, 17) is still continuous
+- [x] every slot's active frames are overwritten during a render; padding keeps its sentinel
+- [x] render allocates nothing: allocation count is unchanged after 100 blocks
+- [x] fan-out and fan-in: Sine -> Gain(0.25), Sine -> Gain(0.5), both -> output gives `0.75 * sin`
+- [x] diamond: Sine -> A, Sine -> B, A -> C, B -> C, C -> output
+- [x] compile rejects: unconnected input, no output, cycle, bad port; render rejects: wrong channel
       count, `frame_count > max_frames`; zero frames is a no-op
-- [ ] failed compile leaks nothing and leaves the builder usable (`checkAllAllocationFailures`)
-- [ ] op list and slot count are pinned for the chain (2 slots, 3 ops) and for fan-in
+- [x] failed compile leaks nothing and leaves the builder usable (`checkAllAllocationFailures`)
+- [x] op list and slot count are pinned for the chain (2 slots, 3 ops) and for fan-in
       (4 slots; `clear, accumulate, accumulate, copy_out` at the end)
 
 ## 8. Open questions

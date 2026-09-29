@@ -1,4 +1,4 @@
-const node_interface = @import("node_interface.zig");
+const node = @import("../node.zig");
 const std = @import("std");
 
 pub fn GainNode(comptime T: type) type {
@@ -6,7 +6,7 @@ pub fn GainNode(comptime T: type) type {
         @compileError("GainNode operates on f32 or f64");
     }
 
-    const GenericNode = node_interface.GenericNode(T);
+    const GenericNode = node.GenericNode(T);
 
     return struct {
         gain: T,
@@ -14,7 +14,7 @@ pub fn GainNode(comptime T: type) type {
         const Self = @This();
         const PrepareContext = GenericNode.PrepareContext;
         const ProcessContext = GenericNode.ProcessContext;
-        const Error = node_interface.NodeError;
+        const Error = node.NodeError;
 
         pub fn name(_: *Self) []const u8 {
             return "GainNode";

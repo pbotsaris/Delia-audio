@@ -325,7 +325,6 @@ const Scratch = struct {
     }
 };
 
-
 fn expectAll(expected: f32, actual: []const f32) !void {
     for (actual) |sample| try testing.expectEqual(expected, sample);
 }

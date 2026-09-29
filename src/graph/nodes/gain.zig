@@ -1,6 +1,6 @@
 const std = @import("std");
 const buffer = @import("../../core/buffer/buffer.zig");
-const node = @import("node.zig");
+const node = @import("../node.zig");
 
 pub fn Gain(comptime T: type) type {
     buffer.requireFloat(T, "Gain");
