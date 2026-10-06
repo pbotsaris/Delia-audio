@@ -16,7 +16,6 @@ pub const LoopError = error{
     failed_recovery,
 } || PcmError;
 
-
 pub const Stats = struct {
     periods: u64 = 0,
     blocks: u64 = 0,
@@ -51,7 +50,7 @@ pub fn PlaybackLoop(comptime Ctx: type, comptime Pcm: type, comptime fmt: Sample
 
         /// Prepare: Only allocations and inits
         pub fn init(allocator: std.mem.Allocator, pcm: *Pcm, opts: LoopOptions) !Self {
-            const staging_buffer = try OwnedAudioBuffer(f32).init(allocator, opts.period_frames, opts.channel_count);
+            const staging_buffer = try OwnedAudioBuffer(f32).init(allocator, .{ .channel_count = opts.channel_count, .max_frames = opts.period_frames });
 
             return .{
                 .pcm = pcm,

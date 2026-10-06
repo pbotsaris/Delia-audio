@@ -116,9 +116,9 @@ test "Oscillator - sine matches an f64 reference, all channels, only active fram
 }
 
 test "Oscillator - phase continues across calls: 8 + 8 frames equal 16" {
-    var owned_split = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, 1, 16);
+    var owned_split = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 1, .max_frames = 16 });
     defer owned_split.deinit(testing.allocator);
-    var owned_whole = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, 1, 16);
+    var owned_whole = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 1, .max_frames = 16 });
     defer owned_whole.deinit(testing.allocator);
 
     var split = Oscillator(f32).init(.sine, 1000, 0.5);

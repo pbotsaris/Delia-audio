@@ -97,7 +97,7 @@ test "plan - hand-built Oscillator -> Gain -> copy_out renders one block" {
         .channel_count = 2,
     };
 
-    var owned = try buffer.OwnedAudioBuffer(f32).init(allocator, 2, 64);
+    var owned = try buffer.OwnedAudioBuffer(f32).init(allocator, .{ .channel_count = 2, .max_frames = 64 });
     defer owned.deinit(allocator);
     const out = try owned.borrowBlock(16);
 
@@ -110,7 +110,7 @@ test "plan - hand-built Oscillator -> Gain -> copy_out renders one block" {
     try testing.expectEqualSlices(f32, out.channel(0), out.channel(1));
 
     // wrong channel count is rejected before anything runs
-    var mono = try buffer.OwnedAudioBuffer(f32).init(allocator, 1, 16);
+    var mono = try buffer.OwnedAudioBuffer(f32).init(allocator, .{ .channel_count = 1, .max_frames = 16 });
     defer mono.deinit(allocator);
     try testing.expectError(error.shape_mismatch, p.render(try mono.borrowBlock(16)));
 }

@@ -211,7 +211,7 @@ test "Node - init reads ports and name from the implementation" {
 }
 
 test "Node - prepare and process dispatch to the implementation" {
-    var owned = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, 2, 8);
+    var owned = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 2, .max_frames = 8 });
     defer owned.deinit(testing.allocator);
 
     var constant = TestConstant{ .value = 0.25 };

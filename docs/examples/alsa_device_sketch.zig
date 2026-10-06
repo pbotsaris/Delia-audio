@@ -7,7 +7,7 @@
 //! A file under docs/ cannot import src/, so the first ~200 lines are stand-ins for things that
 //! already exist. In src/ they are replaced by:
 //!
-//!     buffer  = @import("buffer")   AudioBlock, ConstAudioBlock, OwnedAudioBuffer
+//!     buffer  = @import("../../core/buffer/root.zig")   AudioBlock, ConstAudioBlock, OwnedAudioBuffer
 //!     convert = @import("convert.zig")                     SampleFormat, SampleConverter
 //!     loop    = @import("loop.zig")                        PcmError, Region, PlaybackLoop
 //!
@@ -393,9 +393,9 @@ pub const DeviceError = error{
     hw_params,
     access_unsupported, // only MMAP_INTERLEAVED in M4a (contract 3, row 4)
     format_unsupported,
+period_changed, // the hardware moved period or buffer size away from the request
     channels_unsupported,
     rate_unsupported,
-    period_changed, // the hardware moved period or buffer size away from the request
     prepare,
 sw_params,
     area_geometry,
@@ -428,8 +428,8 @@ pub fn PlaybackDevice(comptime Ctx: type, comptime fmt: SampleFormat) type {
             if (c.snd_pcm_open(&maybe_handle, opts.ident.ptr, c.SND_PCM_STREAM_PLAYBACK, 0) < 0) return error.open;
             const handle = maybe_handle.?;
             errdefer _ = c.snd_pcm_close(handle);
-
             var maybe_params: ?*c.snd_pcm_hw_params_t = null;
+
             if (c.snd_pcm_hw_params_malloc(&maybe_params) < 0) return error.hw_params;
             const params = maybe_params.?;
             defer c.snd_pcm_hw_params_free(params);

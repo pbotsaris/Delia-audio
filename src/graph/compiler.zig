@@ -431,7 +431,7 @@ test "compile - chain renders four blocks that match the reference, phase contin
     var compiled = try TestCompiler.compile(testing.allocator, &builder, test_options);
     defer compiled.deinit(testing.allocator);
 
-    var owned = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, 2, 256);
+    var owned = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 2, .max_frames = 256 });
     defer owned.deinit(testing.allocator);
     const out = try owned.borrowBlock(256);
 
@@ -471,7 +471,7 @@ test "compile - partial last block (64, 64, 17) is continuous; zero frames is a 
     var compiled = try TestCompiler.compile(testing.allocator, &builder, test_options);
     defer compiled.deinit(testing.allocator);
 
-    var owned = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, 2, 145);
+    var owned = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 2, .max_frames = 145 });
     defer owned.deinit(testing.allocator);
     const out = try owned.borrowBlock(145);
 
@@ -493,7 +493,7 @@ test "compile - render writes every slot's active frames and nothing past them" 
 
     @memset(compiled.pool.storage, 9);
 
-    var owned = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, 2, 64);
+    var owned = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 2, .max_frames = 64 });
     defer owned.deinit(testing.allocator);
     try compiled.render(try owned.borrowBlock(10));
 
@@ -518,7 +518,7 @@ test "compile - render allocates nothing" {
     var compiled = try TestCompiler.compile(allocator, &builder, test_options);
     defer compiled.deinit(allocator);
 
-    var owned = try buffer.OwnedAudioBuffer(f32).init(allocator, 2, 64);
+    var owned = try buffer.OwnedAudioBuffer(f32).init(allocator, .{ .channel_count = 2, .max_frames = 64 });
     defer owned.deinit(allocator);
     const out = try owned.borrowBlock(64);
 
@@ -543,7 +543,7 @@ test "compile - fan-out and fan-in into the graph output sums to 0.75 * sine" {
     try testing.expectEqual(Op{ .accumulate = .{ .dst = 3, .src = 2 } }, compiled.ops[5]);
     try testing.expectEqual(Op{ .copy_out = 3 }, compiled.ops[6]);
 
-    var owned = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, 2, 64);
+    var owned = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 2, .max_frames = 64 });
     defer owned.deinit(testing.allocator);
     const out = try owned.borrowBlock(64);
     try compiled.render(out);
@@ -575,7 +575,7 @@ test "compile - diamond mixes into the consumer's input port" {
     try testing.expectEqualSlices(Slot, &.{4}, compiled.ops[6].process.inputs);
     try testing.expectEqual(Op{ .copy_out = 3 }, compiled.ops[7]);
 
-    var owned = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, 2, 64);
+    var owned = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 2, .max_frames = 64 });
     defer owned.deinit(testing.allocator);
     const out = try owned.borrowBlock(64);
 
@@ -625,9 +625,9 @@ test "compile - render rejects wrong channel count and oversized block" {
     var compiled = try TestCompiler.compile(testing.allocator, &builder, test_options);
     defer compiled.deinit(testing.allocator);
 
-    var mono = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, 1, 64);
+    var mono = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 1, .max_frames = 64 });
     defer mono.deinit(testing.allocator);
-    var long = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, 2, 65);
+    var long = try buffer.OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 2, .max_frames = 65 });
     defer long.deinit(testing.allocator);
 
     try testing.expectError(error.shape_mismatch, compiled.render(try mono.borrowBlock(64)));
@@ -644,7 +644,7 @@ fn buildCompileRender(allocator: std.mem.Allocator) !void {
     var compiled = try TestCompiler.compile(allocator, &builder, test_options);
     defer compiled.deinit(allocator);
 
-    var owned = try buffer.OwnedAudioBuffer(f32).init(allocator, 2, 64);
+    var owned = try buffer.OwnedAudioBuffer(f32).init(allocator, .{ .channel_count = 2, .max_frames = 64 });
     defer owned.deinit(allocator);
     try compiled.render(try owned.borrowBlock(64));
 }

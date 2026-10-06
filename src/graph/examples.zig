@@ -24,7 +24,7 @@ pub fn renderInterleavedAlloc(comptime T: type, allocator: std.mem.Allocator, pl
     errdefer allocator.free(interleaved);
 
     // planar scratch for one block; the plan copies its output here
-    var planar = try buffer.OwnedAudioBuffer(T).init(allocator, channel_count, max_frames);
+    var planar = try buffer.OwnedAudioBuffer(T).init(allocator, .{ .channel_count = channel_count, .max_frames = max_frames });
     defer planar.deinit(allocator);
 
     var first_frame: usize = 0;
