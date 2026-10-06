@@ -11,16 +11,21 @@ pub fn OwnedAudioBuffer(comptime T: type) type {
         const Self = @This();
         const alignment = shape.storage_alignment.toByteUnits();
 
+        pub const Options = struct {
+            channel_count: usize,
+            max_frames: usize,
+        };
+
         storage: []align(alignment) T,
         channel_count: usize,
         max_frames: usize,
         channel_stride: usize,
 
-        pub fn init(allocator: std.mem.Allocator, channel_count: usize, max_frames: usize) !Self {
-            const stride = try shape.strideFor(T, max_frames);
+        pub fn init(allocator: std.mem.Allocator, options: Options) !Self {
+            const stride = try shape.strideFor(T, options.max_frames);
             const len = try shape.requiredSamples(.{
-                .channel_count = channel_count,
-                .frame_count = max_frames,
+                .channel_count = options.channel_count,
+                .frame_count = options.max_frames,
                 .channel_stride = stride,
             });
 
@@ -29,8 +34,8 @@ pub fn OwnedAudioBuffer(comptime T: type) type {
 
             return .{
                 .storage = storage,
-                .channel_count = channel_count,
-                .max_frames = max_frames,
+                .channel_count = options.channel_count,
+                .max_frames = options.max_frames,
                 .channel_stride = stride,
             };
         }

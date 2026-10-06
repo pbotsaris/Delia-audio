@@ -154,7 +154,7 @@ test "AudioBlock - asConst shares samples and is read-only" {
 }
 
 test "OwnedAudioBuffer - aligned channel starts, zeroed, bounded by max_frames" {
-    var owned = try OwnedAudioBuffer(f32).init(testing.allocator, 2, 100);
+    var owned = try OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 2, .max_frames = 100 });
     defer owned.deinit(testing.allocator);
 
     // 100 frames rounds up to 112 so channel 1 starts on a 64-byte boundary
@@ -170,7 +170,7 @@ test "OwnedAudioBuffer - aligned channel starts, zeroed, bounded by max_frames" 
 }
 
 test "OwnedAudioBuffer - f64 stride rounds to 8 samples" {
-    var owned = try OwnedAudioBuffer(f64).init(testing.allocator, 2, 100);
+    var owned = try OwnedAudioBuffer(f64).init(testing.allocator, .{ .channel_count = 2, .max_frames = 100 });
     defer owned.deinit(testing.allocator);
 
     try expectEqual(104, owned.channel_stride);
@@ -178,7 +178,7 @@ test "OwnedAudioBuffer - f64 stride rounds to 8 samples" {
 }
 
 test "OwnedAudioBuffer - rejects zero channels" {
-    try expectError(error.zero_channels, OwnedAudioBuffer(f32).init(testing.allocator, 0, 64));
+    try expectError(error.zero_channels, OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 0, .max_frames = 64 }));
 }
 
 test "AudioBufferPool - slots are independent and bounded" {
@@ -211,7 +211,7 @@ test "AudioBufferPool - slots are independent and bounded" {
 }
 
 fn initOwnedAndPool(allocator: std.mem.Allocator) !void {
-    var owned = try OwnedAudioBuffer(f32).init(allocator, 2, 64);
+    var owned = try OwnedAudioBuffer(f32).init(allocator, .{ .channel_count = 2, .max_frames = 64 });
     defer owned.deinit(allocator);
 
     var pool = try AudioBufferPool(f32).init(allocator, .{ .slot_count = 2, .channel_count = 2, .max_frames = 64 });
@@ -269,7 +269,7 @@ test "copy and accumulate - reject shape mismatch and overlap, leave destination
 }
 
 test "copy - accepts differing strides" {
-    var owned = try OwnedAudioBuffer(f32).init(testing.allocator, 2, 4);
+    var owned = try OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 2, .max_frames = 4 });
     defer owned.deinit(testing.allocator);
 
     var packed_samples = [_]f32{ 1, 2, 3, 4, 5, 6, 7, 8 };
@@ -304,7 +304,7 @@ test "accumulate sums, copy replaces" {
 }
 
 test "interleave and deinterleave - round trip, wrong packed length rejected" {
-    var owned = try OwnedAudioBuffer(f32).init(testing.allocator, 2, 16);
+    var owned = try OwnedAudioBuffer(f32).init(testing.allocator, .{ .channel_count = 2, .max_frames = 16 });
     defer owned.deinit(testing.allocator);
 
     const device_in = [_]f32{ 1, -1, 2, -2, 3, -3 };
