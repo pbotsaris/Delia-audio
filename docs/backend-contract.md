@@ -3,20 +3,28 @@
 **Status:** proposed for milestone M4 (`docs/DELIA_REFACTOR_PLAN.md`, section 9). The old
 backend moved unchanged to `src/legacy/backends/`; `src/backends/` is rebuilt against this
 contract and the legacy copy is deleted when M4a's hardware run passes.
-**Sketch:** `docs/examples/device_loop_sketch.zig` is self-contained and runs with
-`zig test docs/examples/device_loop_sketch.zig` (9 tests). It uses a scripted PCM, so the
-transfer rules in section 4 are tested without hardware before any driver code exists.
+**Sketches:** two self-contained files under `docs/examples/`.
+`device_loop_sketch.zig` (9 tests, `zig test docs/examples/device_loop_sketch.zig`) drives the
+loop with a scripted PCM, so the transfer rules in section 4 are tested without hardware.
+`alsa_device_sketch.zig` (6 tests) is the real seam and the device; it links alsa-lib
+(`zig test docs/examples/alsa_device_sketch.zig -I vendor/alsa/include vendor/alsa/src/.libs/libasound.a -lc`)
+and runs the whole open/negotiate/prepare/render/stop/close path on ALSA's `null` plugin, which
+every machine with alsa-lib has.
 
 Builds on `docs/buffer-contract.md` (blocks, lifetime, layout at boundaries) and
 `docs/graph-contract.md` (what `ExecutionPlan.render` accepts). The engine-facing side of a
 backend is the callback signature in section 2; everything else here is how the backend upholds it.
 
-| File | Contents |
-|---|---|
-| `src/backends/alsa/pcm.zig` | `Pcm` seam: the `snd_pcm_*` subset the loops call, as one type; `AlsaPcm` wraps alsa-lib, tests use a scripted one |
-| `src/backends/convert.zig` | `SampleFormat`, `SampleConverter(fmt)`: device bytes to and from planar `f32` blocks, one pass. Backend-neutral; ALSA and CoreAudio map their format enums onto `SampleFormat` at prepare |
-| `src/backends/alsa/driver.zig` | `HalfDuplexDevice`, `FullDuplexDevice`, their loops; comptime-specialized on `Context`, `Pcm` and format |
-| `src/core/buffer/ops.zig` | existing `interleave`/`deinterleave`: `f32` layout change only, used when the device already delivers `f32` |
+| File | Contents | Links alsa-lib |
+|---|---|---|
+| `src/backends/alsa/convert.zig` | `SampleFormat`, `SampleConverter(fmt)`: device bytes to and from planar `f32` blocks, one pass. Backend-neutral in content; moves up to `src/backends/` when a second backend needs it | no |
+| `src/backends/alsa/loop.zig` | `PcmError`, `Region`, `Stats`, `LoopOptions`, `PlaybackLoop(Ctx, Pcm, fmt)`: the policy, generic over the seam | no |
+| `src/backends/alsa/pcm.zig` | `AlsaPcm`: the seam over `snd_pcm_*`; `regionFromArea` | yes |
+| `src/backends/alsa/driver.zig` | `PlaybackDevice(Ctx, fmt)` (later `CaptureDevice`, `FullDuplexDevice`): open, negotiate, prepare, own the seam and the loop | yes |
+| `src/core/buffer/ops.zig` | existing `interleave`/`deinterleave`: `f32` layout change only, used when the device already delivers `f32` | no |
+
+`loop.zig` has no C import on purpose: `zig test` on it needs nothing, and the loop's tests
+drive it with a scripted `Pcm` instead of a device.
 
 ## 1. Slices
 
@@ -44,9 +52,9 @@ buffer        the hardware ring, period * n_periods (ALSA buffer_size). The loop
 ```
 
 ```text
-HalfDuplexDevice(Ctx, opts)  callback: fn (ctx: *Ctx, out: AudioBlock(f32)) void           playback
-                             callback: fn (ctx: *Ctx, in: ConstAudioBlock(f32)) void       capture
-FullDuplexDevice(Ctx, opts)  callback: fn (ctx: *Ctx, in: ConstAudioBlock(f32), out: AudioBlock(f32)) void
+PlaybackDevice(Ctx, fmt)     callback: fn (ctx: *Ctx, out: AudioBlock(f32)) void
+CaptureDevice(Ctx, fmt)      callback: fn (ctx: *Ctx, in: ConstAudioBlock(f32)) void
+FullDuplexDevice(Ctx, fmt)   callback: fn (ctx: *Ctx, in: ConstAudioBlock(f32), out: AudioBlock(f32)) void
 ```
 
 - The callback never sees device bytes, sample formats, or interleaving. It sees planar `f32`

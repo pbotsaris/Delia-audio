@@ -1,8 +1,8 @@
 //! ALSA backend on docs/backend-contract.md. M4a: playback, MMAP interleaved, S16_LE.
-pub const pcm = @import("pcm.zig");
+pub const loop = @import("loop.zig");
 pub const convert = @import("convert.zig");
 
 test {
-    _ = pcm;
+    _ = loop;
     _ = convert;
 }

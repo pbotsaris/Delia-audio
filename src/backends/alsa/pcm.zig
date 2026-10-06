@@ -1,12 +1,8 @@
 const std = @import("std");
-const buffer = @import("../../core/buffer/buffer.zig");
-const convert = @import("convert.zig");
 
-const AudioBlock = buffer.AudioBlock;
-const OwnedAudioBuffer = buffer.OwnedAudioBuffer;
-
-const SampleFormat = convert.SampleFormat;
-const SampleConverter = convert.SampleConverter;
+const c = @cImport({
+    @cInclude("asoundlib.h");
+});
 
 pub const PcmError = error{
     xrun,
@@ -15,208 +11,111 @@ pub const PcmError = error{
     timeout,
 };
 
-pub const LoopError = error{
-    no_progress,
-    failed_recovery,
-} || PcmError;
-
 pub const Region = struct {
     bytes: []u8,
     frame_count: usize,
 };
 
-pub const Stats = struct {
-    periods: u64 = 0,
-    blocks: u64 = 0,
-    xruns: u64 = 0,
-    discontinuities: u64 = 0,
-    short_commits: u64 = 0,
-    zero_transfers: u64 = 0,
+pub const RecoverOption = struct {
+    retries: usize,
+    sleep_ms: usize,
 };
 
-pub const LoopOptions = struct {
-    channel_count: usize,
-    period_frames: usize,
-    timeout_ms: u32 = 100, // finite: stop() must be observable
-    max_zero_transfers: usize = 5,
+pub const AlsaPcm = struct {
+    const Self = @This();
+
+    handle: *c.snd_pcm_t,
+    bytes_per_frame: usize,
+    offset: c.snd_pcm_uframes_t = 0,
+    recover_option: RecoverOption = .{ .retries = 5, .sleep_ms = 10 },
+
+    pub fn availUpdate(self: *Self) PcmError!usize {
+        const avail: c_long = c.snd_pcm_avail_update(self.handle);
+        if (avail < 0) return self.errnoToPcm(avail);
+
+        return @intCast(avail);
+    }
+
+    pub fn start(self: *Self) PcmError!void {
+        const result = c.snd_pcm_start(self.handle);
+        if (result < 0) return self.errnoToPcm(result);
+    }
+
+    pub fn wait(self: *Self, timeout_ms: u32) PcmError!void {
+        const result = c.snd_pcm_wait(self.handle, @intCast(timeout_ms));
+
+        // 0 means timeout elapsed, not successful wait, so we return a timeout error
+        if (result == 0) return PcmError.timeout;
+
+        if (result < 0) return errnoToPcm(result);
+    }
+
+    pub fn mmapBegin(self: *Self, frame_count_wanted: usize) PcmError!void {
+        var areas: ?*const c.snd_pcm_channel_area_t = null;
+        var frames: c.snd_pcm_uframes_t = @intCast(frame_count_wanted);
+
+        const result = c.snd_pcm_mmap_begin(self.handle, &areas, &self.offset, &frames);
+        if (result < 0) return self.errnoToPcm(result);
+
+        // interleaved access: one area describes every channel; geometry was validated at prepare
+        const area = areas orelse return PcmError.io;
+
+        return regionFromArea(area, self.offset, frames, self.bytes_per_frame) orelse PcmError.io;
+    }
+
+    pub fn mmapCommit(self: *Self, frame_count: usize) PcmError!void {
+        const result = c.snd_pcm_mmap_commit(self.handle, self.offset, @intCast(frame_count));
+        if (result < 0) return self.errnoToPcm(result);
+
+        return @intCast(result);
+    }
+
+    pub fn recover(self: *Self, err: PcmError) PcmError!void {
+        const retries = self.recover_option.retries;
+        const sleep_ms = self.recover_option.sleep_ms;
+
+        if (err == PcmError.suspended) {
+            const result = c.snd_pcm_resume(self.handle);
+            while (result == -c.EAGAIN and retries > 0) : (retries -= 1) {
+                sleepMs(sleep_ms);
+                result = c.snd_pcm_resume(self.handle);
+            }
+
+            if (result >= 0) return;
+        }
+
+        const result = c.snd_pcm_prepare(self.handle);
+        if (result < 0) return self.errnoToPcm(result);
+    }
+
+    fn errnoToPcm(result: anytype) PcmError {
+        // integer types diverge between alsa calls start returns c_int and avail_update returns c_long
+        const errno: c_int = @intCast(result);
+
+        return switch (errno) {
+            c.EPIPE => error.xrun,
+            c.ESTRPIPE => error.suspended,
+            else => error.io,
+        };
+    }
+
+    /// Pure arithmetic over an interleaved area, separated so it can be tested without a device.
+    /// Returns null when the area's stride disagrees with the negotiated frame size.
+    fn regionFromArea(area: *const c.snd_pcm_channel_area_t, offset: c.snd_pcm_uframes_t, frame_count: c.snd_pcm_uframes_t, bytes_per_frame: usize) ?Region {
+        const step_bytes: usize = area.step / 8;
+        if (step_bytes != bytes_per_frame) return null;
+
+        const addr: [*]u8 = @ptrCast(area.addr orelse return null);
+        const start_at: usize = area.first / 8 + offset * step_bytes;
+        return .{ .bytes = addr[start_at..][0 .. frame_count * step_bytes], .frame_count = frame_count };
+    }
+
+    fn sleepMs(ms: u64) void {
+        var req: std.c.timespec = .{
+            .sec = @intCast(ms / 1000),
+            .nsec = @intCast((ms % 1000) * std.time.ns_per_ms),
+        };
+
+        _ = std.c.nanosleep(&req, null);
+    }
 };
-
-pub const PcmState = enum { prepared, running, xrun, suspended };
-
-pub fn PlaybackLoop(comptime Ctx: type, comptime Pcm: type, comptime fmt: SampleFormat) type {
-    return struct {
-        const Self = @This();
-
-        pub const Callback = *const fn (ctx: *Ctx, out: AudioBlock(f32)) void;
-        const Converter = SampleConverter(fmt);
-
-        pcm: *Pcm,
-        staging: OwnedAudioBuffer(f32),
-        opts: LoopOptions,
-        running: std.atomic.Value(bool) = .init(false),
-        started: bool = false,
-        stats: Stats = .{},
-
-        /// Prepare: Only allocations and inits
-        pub fn init(allocator: std.mem.Allocator, pcm: *Pcm, opts: LoopOptions) !Self {
-            const staging_buffer = try OwnedAudioBuffer(f32).init(allocator, opts.period_frames, opts.channel_count);
-
-            return .{
-                .pcm = pcm,
-                .staging = staging_buffer,
-                .opts = opts,
-            };
-        }
-
-        pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
-            // can only be called after stop() has been called and the loop has exited
-            std.debug.assert(!self.running.load(.acquire));
-            self.staging.deinit(allocator);
-        }
-
-        pub fn start(self: *Self, ctx: *Ctx, callback: Callback) LoopError!void {
-            self.running.store(true, .release);
-            defer self.running.store(false, .release);
-
-            while (self.running.load(.acquire)) try self.runPeriod(ctx, callback);
-        }
-
-        pub fn stop(self: *Self) void {
-            self.running.store(false, .release);
-        }
-
-        pub fn runPeriod(self: *Self, ctx: *Ctx, callback: Callback) LoopError!void {
-            self.stats.periods += 1;
-
-            const avail = self.pcm.availUpdate() catch |err| return self.recover(err);
-
-            if (try self.waitPeriod(avail) == .skip_period) return;
-
-            var remaining: usize = self.opts.period_frames;
-            var zero_progress: usize = 0;
-
-            while (remaining > 0) {
-                const region: Region = self.pcm.mmapBegin(remaining) catch |err| {
-                    self.stats.discontinuities += 1;
-                    return self.recover(err);
-                };
-
-                if (region.frame_count == 0) {
-                    zero_progress += 1;
-                    self.stats.zero_transfers += 1;
-
-                    if (zero_progress >= self.opts.max_zero_transfers) return LoopError.no_progress;
-
-                    _ = self.pcm.mmapCommit(0) catch |err| return self.recover(err);
-                    continue;
-                }
-
-                zero_progress = 0;
-
-                // region.frame_count <= remaining <= period_frames == staging.max_frames; proved at prepare.
-                const block = self.staging.borrowBlock(region.frame_count) catch unreachable;
-
-                callback(ctx, block);
-                self.stats.blocks += 1;
-
-                const byte_len = Converter.byteLength(self.opts.channel_count, region.frame_count);
-
-                Converter.writeInterleaved(region.bytes[0..byte_len], block.asConst()) catch unreachable;
-
-                const committed_count = self.pcm.mmapCommit(region.frame_count) catch |err| {
-                    self.stats.discontinuities += 1;
-                    return self.recover(err);
-                };
-
-                if (committed_count != region.frame_count) {
-                    self.stats.short_commits += 1;
-                    self.stats.discontinuities += 1;
-                    return self.recover(PcmError.xrun);
-                }
-
-                remaining -= committed_count;
-            }
-        }
-
-        const Readiness = enum { ready, skip_period };
-
-        /// Readiness: the loop may wait here; the callback may not (plan 8.1).
-        /// A stream that was just started, or that timed out waiting, has nothing to transfer: skip the period.
-        fn waitPeriod(self: *Self, avail: usize) LoopError!Readiness {
-            if (avail >= self.opts.period_frames) return .ready;
-
-            if (!self.started) {
-                try self.pcm.start();
-                self.started = true;
-                return .skip_period;
-            }
-
-            self.pcm.wait(self.opts.timeout_ms) catch |err| {
-                try self.recover(err);
-                return .skip_period;
-            };
-
-            return .ready;
-        }
-
-        fn recover(self: *Self, err: PcmError) LoopError!void {
-            switch (err) {
-                error.xrun, error.suspended => {
-                    self.stats.xruns += 1;
-                    self.pcm.recover(err) catch return error.failed_recovery;
-                    // snd_pcm_prepare leaves the stream stopped; the next period starts it again
-                    self.started = false;
-                },
-
-                error.timeout => {}, // stop() may have been called; the while in start() decides
-                error.io => return error.io,
-            }
-        }
-    };
-}
-
-// Forces analysis of the generic bodies above. Replaced by the scripted-PCM tests in M4b.
-test "PlaybackLoop and SampleConverter instantiate" {
-    const StubPcm = struct {
-        const Self = @This();
-
-        pub fn availUpdate(_: *Self) PcmError!usize {
-            return 0;
-        }
-        pub fn start(_: *Self) PcmError!void {}
-        pub fn wait(_: *Self, _: u32) PcmError!void {}
-        pub fn mmapBegin(_: *Self, _: usize) PcmError!Region {
-            return error.io;
-        }
-        pub fn mmapCommit(_: *Self, n: usize) PcmError!usize {
-            return n;
-        }
-        pub fn recover(_: *Self, _: PcmError) PcmError!void {}
-    };
-    const Ctx = struct {
-        const Self = @This();
-
-        fn cb(_: *Self, _: AudioBlock(f32)) void {}
-    };
-    const Loop = PlaybackLoop(Ctx, StubPcm, .s16_le);
-    std.testing.refAllDecls(Loop);
-    std.testing.refAllDecls(SampleConverter(.s16_le));
-    std.testing.refAllDecls(SampleConverter(.f32_le));
-
-    var pcm = StubPcm{};
-    var loop = try Loop.init(std.testing.allocator, &pcm, .{ .channel_count = 2, .period_frames = 64 });
-    defer loop.deinit(std.testing.allocator);
-    var ctx = Ctx{};
-    // first period: avail 0 and not started -> start() and return without rendering
-    try loop.runPeriod(&ctx, Ctx.cb);
-    try std.testing.expectEqual(1, loop.stats.periods);
-}
-
-test "s16 encode/decode round trip" {
-    const S16 = SampleConverter(.s16_le);
-    var bytes: [2]u8 = undefined;
-    S16.encode(&bytes, 0.5);
-    try std.testing.expectApproxEqAbs(0.5, S16.decode(&bytes), 1.0 / 32767.0);
-    S16.encode(&bytes, 1.5);
-    try std.testing.expectEqual(std.math.maxInt(i16), std.mem.readInt(i16, &bytes, .little));
-}
