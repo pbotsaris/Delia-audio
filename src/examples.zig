@@ -1,8 +1,8 @@
 const std = @import("std");
-const dsp = @import("dsp/dsp.zig");
-const graph = @import("legacy/graph/graph.zig");
-const specs = @import("common/audio_specs.zig");
-const alsa = @import("legacy/backends/backends.zig").alsa;
+const dsp = @import("dsp");
+const graph = @import("legacy_graph");
+const specs = @import("common").audio_specs;
+const alsa = @import("legacy_backends").alsa;
 
 pub const std_options: std.Options = .{
     .log_level = .debug,

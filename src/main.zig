@@ -1,11 +1,11 @@
 const std = @import("std");
-const dsp = @import("dsp/dsp.zig");
-const graph = @import("graph/graph.zig");
-const audio_specs = @import("common/audio_specs.zig");
+const dsp = @import("dsp");
+const graph = @import("graph");
+const audio_specs = @import("common").audio_specs;
 const ex = @import("examples.zig");
 
-const backends = @import("backends/backends.zig");
-const legacy_backends = @import("legacy/backends/backends.zig"); // examples.zig plays through it until M4a
+const backends = @import("backends");
+const legacy_backends = @import("legacy_backends"); // examples.zig plays through it until M4a
 
 pub const std_options: std.Options = .{
     .log_level = .debug,
@@ -41,17 +41,8 @@ pub fn main() !void {
 }
 
 test {
-    _ = backends;
-    _ = dsp;
-    _ = graph;
-    _ = @import("legacy/graph/graph.zig"); // old scheduler; examples.zig uses it until M4a
-    _ = legacy_backends;
-    _ = audio_specs;
-    _ = @import("common/audio_buffer.zig");
-    _ = @import("core/buffer/buffer.zig");
-    _ = @import("utils/utils.zig");
-
-    // examples have no tests; reference them so they keep compiling
+    // Each module is its own test root in build.zig; this block only covers main.zig's
+    // own files. Examples have no tests; reference them so they keep compiling.
     std.testing.refAllDecls(legacy_backends.alsa.examples);
     std.testing.refAllDecls(ex.Example);
 }

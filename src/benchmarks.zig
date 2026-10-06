@@ -1,5 +1,5 @@
 const std = @import("std");
-const dsp = @import("dsp/dsp.zig");
+const dsp = @import("dsp");
 const zbench = @import("zbench");
 
 fn fftPowerOfTwo(allocator: std.mem.Allocator) void {

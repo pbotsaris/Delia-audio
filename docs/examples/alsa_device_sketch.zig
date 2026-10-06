@@ -7,7 +7,7 @@
 //! A file under docs/ cannot import src/, so the first ~200 lines are stand-ins for things that
 //! already exist. In src/ they are replaced by:
 //!
-//!     buffer  = @import("../../core/buffer/buffer.zig")   AudioBlock, ConstAudioBlock, OwnedAudioBuffer
+//!     buffer  = @import("buffer")   AudioBlock, ConstAudioBlock, OwnedAudioBuffer
 //!     convert = @import("convert.zig")                     SampleFormat, SampleConverter
 //!     loop    = @import("loop.zig")                        PcmError, Region, PlaybackLoop
 //!

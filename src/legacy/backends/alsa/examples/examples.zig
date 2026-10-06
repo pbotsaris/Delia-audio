@@ -1,6 +1,6 @@
 const std = @import("std");
 const alsa = @import("../alsa.zig");
-const wave = @import("../../../../dsp/waves.zig");
+const wave = @import("dsp").waves;
 const latency = @import("../latency.zig");
 
 const log = std.log.scoped(.alsa);

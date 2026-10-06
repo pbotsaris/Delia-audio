@@ -1,6 +1,6 @@
 const std = @import("std");
-const audio_buffer = @import("../../common/audio_buffer.zig");
-const specs = @import("../../common/audio_specs.zig");
+const audio_buffer = @import("common").audio_buffer;
+const specs = @import("common").audio_specs;
 
 pub const NodeStatus = enum(u8) {
     init,

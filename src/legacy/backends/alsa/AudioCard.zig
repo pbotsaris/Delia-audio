@@ -3,7 +3,7 @@
 //! and manage audio port information and settings.
 
 const std = @import("std");
-const utils = @import("../../../utils/utils.zig");
+const utils = @import("utils");
 
 const c_alsa = @cImport({
     @cInclude("asoundlib.h");
@@ -12,7 +12,7 @@ const c_alsa = @cImport({
 const AlsaError = @import("error.zig").AlsaError;
 const FormatType = @import("settings.zig").FormatType;
 const StreamType = @import("settings.zig").StreamType;
-const SampleRate = @import("../../../common/audio_specs.zig").SampleRate;
+const SampleRate = @import("common").audio_specs.SampleRate;
 const ChannelCount = @import("settings.zig").ChannelCount;
 const settings = @import("settings.zig");
 const SupportedSettings = @import("SupportedSettings.zig");

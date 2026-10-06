@@ -1,4 +1,4 @@
-pub const nodes = @import("nodes/nodes.zig");
+pub const nodes = @import("nodes/root.zig");
 pub const Node = @import("node.zig").Node;
 pub const builder = @import("builder.zig");
 pub const plan = @import("plan.zig");
@@ -6,7 +6,7 @@ pub const compiler = @import("compiler.zig");
 pub const examples = @import("examples.zig");
 
 test {
-    _ = @import("nodes/nodes.zig");
+    _ = @import("nodes/root.zig");
     _ = @import("node.zig");
     _ = builder;
     _ = plan;
@@ -20,7 +20,7 @@ test {
 // ---------------------------------------------------------------------------
 
 const std = @import("std");
-const buffer = @import("../core/buffer/buffer.zig");
+const buffer = @import("buffer");
 const testing = std.testing;
 
 test "builder - add, connect, mark output, reject bad edges" {

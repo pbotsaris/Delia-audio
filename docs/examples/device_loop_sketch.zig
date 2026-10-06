@@ -7,7 +7,7 @@
 //! A file under docs/ cannot import src/, so the first ~90 lines are stand-ins for things that
 //! already exist. In src/ they are replaced by:
 //!
-//!     buffer = @import("../core/buffer/buffer.zig")    AudioBlock, ConstAudioBlock, OwnedAudioBuffer
+//!     buffer = @import("buffer")    AudioBlock, ConstAudioBlock, OwnedAudioBuffer
 //!
 //! The parts worth implementing as written are marked "port as is" and land in:
 //!

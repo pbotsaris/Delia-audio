@@ -3,8 +3,8 @@
 
 const std = @import("std");
 const Node = @import("node.zig").Node;
-const buffer = @import("../core/buffer/buffer.zig");
-const specs = @import("../common/audio_specs.zig");
+const buffer = @import("buffer");
+const specs = @import("common").audio_specs;
 
 /// Index of a block in the plan's pool.
 pub const Slot = u32;

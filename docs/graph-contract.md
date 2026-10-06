@@ -13,7 +13,7 @@ this contract and is not repeated here.
 |---|---|
 | `src/graph/node.zig` | `Node(T)`, `Ports`, `PrepareContext`, `ProcessContext`, `NodeError` |
 | `src/graph/nodes/gain.zig`, `src/graph/nodes/oscillator.zig` | first nodes on the new interface |
-| `src/graph/nodes/nodes.zig`, `src/graph/graph.zig` | aggregators |
+| `src/graph/nodes/root.zig`, `src/graph/root.zig` | aggregators |
 | `src/graph/builder.zig` | `GraphBuilder(T)`: nodes, edges, output marker |
 | `src/graph/compiler.zig` | `Compiler(T).compile()`: builder to plan |
 | `src/graph/plan.zig` | `ExecutionPlan(T)`, `Op`, `render()` |

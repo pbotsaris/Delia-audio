@@ -1,14 +1,14 @@
 # Buffer contract
 
 **Status:** implemented in `src/core/buffer/` for milestone M1 (`docs/DELIA_REFACTOR_PLAN.md`,
-section 4). Every acceptance item in section 9 has a test in `src/core/buffer/buffer.zig`.
+section 4). Every acceptance item in section 9 has a test in `src/core/buffer/root.zig`.
 **Example:** `docs/examples/audio_block_sketch.zig` is the design sketch that preceded the
 implementation. It uses older names (`BlockError`, `block()`, `slot()`); the code in
 `src/core/buffer/` is authoritative.
 
 | File | Contents |
 |---|---|
-| `buffer.zig` | public surface and tests. The only file other modules import |
+| `root.zig` | public surface and tests; root of the `buffer` module, the only file other modules import |
 | `block.zig` | `AudioBlock`, `ConstAudioBlock` |
 | `storage.zig` | `OwnedAudioBuffer`, `AudioBufferPool` |
 | `ops.zig` | `clear`, `copy`, `accumulate`, `interleave`, `deinterleave`, `blocksOverlap` |

@@ -1,6 +1,6 @@
 const std = @import("std");
 const log = @import("log.zig").log;
-const audio_specs = @import("../common/audio_specs.zig");
+const audio_specs = @import("common").audio_specs;
 
 pub fn Wave(comptime T: type) type {
     if (T != f32 and T != f64) {

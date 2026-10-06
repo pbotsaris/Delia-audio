@@ -35,30 +35,45 @@ zig build test -Dtest-filter=FFT   # only tests whose name contains the string (
 zig build bench                    # zbench microbenchmarks in src/benchmarks.zig (compare with bench.txt)
 ```
 
-`run`, `check`, and `test` share one root module (`src/main.zig`) in `build.zig`, so ALSA is wired once. ALSA is linked statically from `vendor/alsa/src/.libs/libasound.a`, built on first `zig build` from the submodule. zBench is pinned to v0.13.0, the last release that targets Zig 0.16.
+ALSA is linked statically from `vendor/alsa/src/.libs/libasound.a`, built on first `zig build` from the submodule; it is attached to the `alsa` and `legacy_backends` modules only. zBench is pinned to v0.13.0, the last release that targets Zig 0.16.
 
-Tests are aggregated through explicit `test { _ = module; }` blocks: `src/main.zig` references the aggregators (`src/dsp/dsp.zig`, `src/graph/graph.zig`, `src/legacy/graph/graph.zig`, `src/backends/backends.zig`, `src/backends/alsa/alsa.zig`, `src/core/buffer/buffer.zig`), and each aggregator references its files. 0.16 has no `refAllDeclsRecursive`, so a new file only gets tested once it is added to its aggregator's `test` block. Function bodies are analysed lazily: code that no test or entry point calls is not compiled. `main.zig` uses `std.testing.refAllDecls` on the example namespaces to keep them compiling. `src/dsp/filters/` is not wired into `dsp.zig` yet.
+### Modules
 
-Run a single file's tests directly. Pure Zig files need nothing extra:
+Every subsystem is a named module declared in `build.zig`, and files import across folders by module name, never by relative path:
+
+| module | root file | imports |
+|---|---|---|
+| `buffer` | `src/core/buffer/root.zig` | — |
+| `utils` | `src/utils/root.zig` | — |
+| `common` | `src/common/root.zig` (`audio_specs`, `audio_buffer`) | — |
+| `dsp` | `src/dsp/dsp.zig` | `common` |
+| `graph` | `src/graph/root.zig` | `buffer`, `common` |
+| `alsa` | `src/backends/alsa/root.zig` | `buffer` (+ ALSA) |
+| `backends` | `src/backends/root.zig` | `alsa` |
+| `legacy_graph` | `src/legacy/graph/graph.zig` | `common`, `dsp` |
+| `legacy_backends` | `src/legacy/backends/backends.zig` | `common`, `utils`, `dsp` (+ ALSA) |
+| root | `src/main.zig` | all of the above |
+
+So `src/graph/plan.zig` writes `const buffer = @import("buffer");` and `const specs = @import("common").audio_specs;`. Within a module, sibling files are still imported by relative path (`@import("node.zig")`, `@import("nodes/root.zig")`). Two compiler rules make the table the real dependency graph: a file belongs to exactly one module, and a module may only import files under its root's directory. A new cross-module edge is therefore a `addImport` line in `build.zig`, and a cycle is a compile error. `root.zig` is the module-root filename by convention (what `zig init` uses); nothing depends on the name.
+
+### Tests
+
+The test runner only collects `test` blocks from the files of the module it is given, so `build.zig` emits one test binary per module (`test_buffer`, `test_graph`, ..., `test_root`) and `zig build test` runs them all; `-Dtest-filter` applies to each. Within a module, tests are aggregated through explicit `test { _ = file; }` blocks in the module root (0.16 has no `refAllDeclsRecursive`), so a new file only gets tested once it is added to its root's `test` block. Function bodies are analysed lazily: code that no test or entry point calls is not compiled. `main.zig` uses `std.testing.refAllDecls` on the example namespaces to keep them compiling. `src/dsp/filters/` is not wired into `dsp.zig` yet.
+
+Run a single file's tests directly only when it imports no named module. Leaf modules and files qualify:
 
 ```sh
 zig test src/dsp/transforms.zig
-zig test src/core/buffer/buffer.zig --test-filter "AudioBlock"
+zig test src/core/buffer/root.zig --test-filter "AudioBlock"
 ```
 
-Files that `@cImport` ALSA need the include path, the static lib, and libc:
-
-```sh
-zig test src/backends/alsa/driver.zig -I vendor/alsa/include vendor/alsa/src/.libs/libasound.a -lc
-```
-
-`zig test` makes the given file the module root, so files with `../` imports (all of `graph/`, `legacy/` and most of `backends/alsa/`) must be tested through a root under `src/` or via `zig build test -Dtest-filter=...`. The sketches in `docs/examples/` are self-contained and run with `zig test docs/examples/<file>.zig`.
+Anything that says `@import("buffer")`, `@import("common")`, etc. (all of `graph/`, `backends/alsa/`, `legacy/`, `dsp/waves.zig`) has no module table under bare `zig test`; use `zig build test -Dtest-filter=...`. The sketches in `docs/examples/` are self-contained and run with `zig test docs/examples/<file>.zig`.
 
 `zig ast-check <file>` checks one file for syntax and AST-level errors with no build wiring. Use it as the first pass on any file you touch; it does not catch std API mismatches.
 
 ### Python bindings
 
-`pydelia-build/` builds `src/python.zig` into a CPython extension with `zig build-lib` (see `builder.py`). `src/python.zig` includes `Python.h` by name; the include path comes from the `-I` flags `builder.py` passes (setuptools adds the active interpreter's include dir), so build it from the Python env you will import it in: `cd pydelia-build && python setup.py build_ext --inplace`. It is not part of `zig build` or `zig build test`. It uses `f64` throughout; it is a testing/visualization surface for the notebooks in `notebooks/`, not a performance path.
+`pydelia-build/` builds `src/python.zig` into a CPython extension with `zig build-lib` (see `builder.py`). `src/python.zig` includes `Python.h` by name; the include path comes from the `-I` flags `builder.py` passes (setuptools adds the active interpreter's include dir), so build it from the Python env you will import it in: `cd pydelia-build && python setup.py build_ext --inplace`. It is not part of `zig build` or `zig build test`, so `builder.py` declares the `dsp` and `common` modules itself with `--dep`/`-M` flags; keep that list in step with the module table in `build.zig`. It uses `f64` throughout; it is a testing/visualization surface for the notebooks in `notebooks/`, not a performance path.
 
 ## Architecture
 
@@ -83,7 +98,7 @@ ALSA device options are negotiated at `init`/`prepare` (hardware buffer = `buffe
 
 ### Graph pipeline
 
-Three phases in three files, plus the node contract. Import through `src/graph/graph.zig`.
+Three phases in three files, plus the node contract. Import through the `graph` module (`src/graph/root.zig`).
 
 - `node.zig`: `Node(T)` is the type-erased wrapper (`ptr`, `vtable`, `ports`, `name`). A node is a struct with `pub const ports: Ports`, `pub const name: []const u8`, `prepare(*Self, PrepareContext) NodeError!void` and `process(*Self, ProcessContext) void`; `Node(T).init` checks all of it at comptime. `ProcessContext` has separate `inputs` and `outputs`, one block per port. Nodes never allocate in `process` and carry no status: order is the compiler's decision. Implementations live in `nodes/` (`Gain`, `Oscillator`).
 - `builder.zig`: `GraphBuilder(T)` is mutable and editing-time only. `addNode` heap-copies the struct; `connect`, `connectPorts` and `connectOutput` reject `invalid_handle` and `port_out_of_range` at the call site. The graph output is not a node. The builder owns the nodes and outlives every plan compiled from it.
@@ -98,7 +113,7 @@ Tests in `compiler.zig` pin exact slot counts and op lists; keep them when touch
 
 Two implementations coexist until the ALSA backend migrates in M4.
 
-**New (`core/buffer/`, contract in `docs/buffer-contract.md`):** import only `core/buffer/buffer.zig`. `AudioBlock(T)` and `ConstAudioBlock(T)` are borrowed planar views (`samples`, `channel_count`, `frame_count`, `channel_stride`) generated from one private `Block(T, mutability)` in `block.zig`; `channel(c)` returns a slice of the active frames. `OwnedAudioBuffer` and `AudioBufferPool` (`storage.zig`) own 64-byte-aligned storage, take the allocator in `init`/`deinit` without storing it, and lend blocks through `borrowBlock`/`borrowSlot`. `ops.zig` has `clear`, `copy`, `accumulate`, `interleave`, `deinterleave`; they return `shape_mismatch` or `forbidden_overlap` and write nothing on failure. `ProcessContext` is defined on `Node(T)` in `src/graph/node.zig`, not here. Interleaved audio exists only as packed slices at device/file boundaries.
+**New (`core/buffer/`, contract in `docs/buffer-contract.md`):** import only the `buffer` module (`src/core/buffer/root.zig`). `AudioBlock(T)` and `ConstAudioBlock(T)` are borrowed planar views (`samples`, `channel_count`, `frame_count`, `channel_stride`) generated from one private `Block(T, mutability)` in `block.zig`; `channel(c)` returns a slice of the active frames. `OwnedAudioBuffer` and `AudioBufferPool` (`storage.zig`) own 64-byte-aligned storage, take the allocator in `init`/`deinit` without storing it, and lend blocks through `borrowBlock`/`borrowSlot`. `ops.zig` has `clear`, `copy`, `accumulate`, `interleave`, `deinterleave`; they return `shape_mismatch` or `forbidden_overlap` and write nothing on failure. `ProcessContext` is defined on `Node(T)` in `src/graph/node.zig`, not here. Interleaved audio exists only as packed slices at device/file boundaries.
 
 **Old (`common/audio_buffer.zig`):** `ChannelView` owns storage, `UnmanagedChannelView` borrows it, `UniformChannelViews` is one contiguous pool exposing N views. Access is interleaved or non-interleaved via a runtime tag; `block_size` doubles as physical stride. Still used by the legacy graph and scheduler. Do not add features to it.
 

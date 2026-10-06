@@ -1,6 +1,6 @@
 const std = @import("std");
-const SampleRate = @import("../../../common/audio_specs.zig").SampleRate;
-const BufferSize = @import("../../../common/audio_specs.zig").BufferSize;
+const SampleRate = @import("common").audio_specs.SampleRate;
+const BufferSize = @import("common").audio_specs.BufferSize;
 
 const c_alsa = @cImport({
     @cInclude("alsa/asoundlib.h");

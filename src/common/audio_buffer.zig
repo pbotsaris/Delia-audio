@@ -1,5 +1,5 @@
 const std = @import("std");
-const specs = @import("../common/audio_specs.zig");
+const specs = @import("audio_specs.zig");
 
 pub const AccessPattern = enum {
     interleaved,

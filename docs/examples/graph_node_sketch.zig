@@ -6,7 +6,7 @@
 //! A file under docs/ cannot import src/, so the block types and the oscillator below are
 //! minimal stand-ins. In src/ they are replaced by:
 //!
-//!     buffer   = @import("../core/buffer/buffer.zig")     AudioBlock, ConstAudioBlock, ProcessContext
+//!     buffer   = @import("buffer")     AudioBlock, ConstAudioBlock, ProcessContext
 //!     specs    = @import("../common/audio_specs.zig")     BlockSize for PrepareContext.max_frames
 //!     dsp      = @import("../dsp/dsp.zig")                waves.Wave(T).sine for the Sine node
 //!
@@ -15,7 +15,7 @@
 const std = @import("std");
 
 // ---------------------------------------------------------------------------
-// Stand-ins for src/core/buffer/buffer.zig. Same field names and channel() rule; no validation.
+// Stand-ins for src/core/buffer/root.zig. Same field names and channel() rule; no validation.
 // ---------------------------------------------------------------------------
 
 fn requireFloat(comptime T: type, comptime name: []const u8) void {

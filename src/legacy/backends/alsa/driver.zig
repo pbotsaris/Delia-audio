@@ -30,8 +30,8 @@ pub const ChannelCount = @import("settings.zig").ChannelCount;
 pub const Mode = @import("settings.zig").Mode;
 const GenericAudioData = @import("audio_data.zig").GenericAudioData;
 
-pub const SampleRate = @import("../../../common/audio_specs.zig").SampleRate;
-pub const BufferSize = @import("../../../common/audio_specs.zig").BufferSize;
+pub const SampleRate = @import("common").audio_specs.SampleRate;
+pub const BufferSize = @import("common").audio_specs.BufferSize;
 
 const ProbeOptions = struct {
     callback: latency.ProbeCallback,

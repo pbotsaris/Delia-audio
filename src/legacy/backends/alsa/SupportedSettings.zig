@@ -10,7 +10,7 @@ const StreamType = settings.StreamType;
 const Channels = settings.ChannelCount;
 const AccessType = settings.AccessType;
 
-const SampleRate = @import("../../../common/audio_specs.zig").SampleRate;
+const SampleRate = @import("common").audio_specs.SampleRate;
 
 const log = std.log.scoped(.alsa);
 const SupportedSettings = @This();

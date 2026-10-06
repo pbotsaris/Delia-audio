@@ -6,11 +6,11 @@
 //! A file under docs/ cannot import src/, so the first ~150 lines are stand-ins for things
 //! that already exist. In src/ they are replaced by:
 //!
-//!     buffer = @import("../core/buffer/buffer.zig")    AudioBlock, ConstAudioBlock, AudioBufferPool,
+//!     buffer = @import("buffer")    AudioBlock, ConstAudioBlock, AudioBufferPool,
 //!                                                       clear, copy, accumulate
 //!     node   = @import("nodes/node.zig")                Node(T), Ports, NodeError
 //!     specs  = @import("../common/audio_specs.zig")     BlockSize for CompileOptions.max_frames
-//!     nodes  = @import("nodes/nodes.zig")               Gain, Oscillator (tests only)
+//!     nodes  = @import("nodes/root.zig")               Gain, Oscillator (tests only)
 //!
 //! The parts worth implementing as written are marked "port as is". The file layout in src/ is
 //! builder.zig, compiler.zig and plan.zig; the sketch keeps them in one file, separated by rules.

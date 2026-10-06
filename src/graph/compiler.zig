@@ -18,10 +18,10 @@
 //!     clear 3, accumulate 3 += 1, accumulate 3 += 2, copy_out 3
 
 const std = @import("std");
-const specs = @import("../common/audio_specs.zig");
+const specs = @import("common").audio_specs;
 const graph_node = @import("node.zig");
 const plan = @import("plan.zig");
-const buffer = @import("../core/buffer/buffer.zig");
+const buffer = @import("buffer");
 const b = @import("builder.zig");
 
 const ConstAudioBlock = buffer.ConstAudioBlock;
@@ -381,7 +381,7 @@ fn Compilation(comptime T: type) type {
 // ---------------------------------------------------------------------------
 
 const testing = std.testing;
-const test_nodes = @import("nodes/nodes.zig");
+const test_nodes = @import("nodes/root.zig");
 
 const Oscillator = test_nodes.Oscillator(f32);
 const Gain = test_nodes.Gain(f32);

@@ -1,5 +1,5 @@
 const std = @import("std");
-const buffer = @import("../../core/buffer/buffer.zig");
+const buffer = @import("buffer");
 const convert = @import("convert.zig");
 
 pub const PcmError = @import("pcm.zig").PcmError;

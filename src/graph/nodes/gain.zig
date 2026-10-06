@@ -1,5 +1,5 @@
 const std = @import("std");
-const buffer = @import("../../core/buffer/buffer.zig");
+const buffer = @import("buffer");
 const node = @import("../node.zig");
 
 pub fn Gain(comptime T: type) type {
