@@ -19,7 +19,8 @@ pub const NodeHandle = struct {
 pub const BuilderError = error{ invalid_handle, port_out_of_range } || std.mem.Allocator.Error;
 
 /// Graph builder is mutable only at editing time.
-/// owns the node healp; a plan borrows them.
+/// It builds a graph in the traditional sense, that will be later flattened by the compiler.zig.
+/// owns the node heap; the plan borrows them.
 /// nothing can be done while a plan is rendering.
 /// First must stop, edit, recompile, and then start again.
 pub fn GraphBuilder(comptime T: type) type {
@@ -41,6 +42,7 @@ pub fn GraphBuilder(comptime T: type) type {
             return .{ .allocator = allocator };
         }
 
+        /// After build, the builder deinits all the memory it owns. We don't use this memory in realtime.
         pub fn deinit(self: *Self) void {
             for (self.nodes.items) |n| n.destroy(self.allocator);
             self.nodes.deinit(self.allocator);

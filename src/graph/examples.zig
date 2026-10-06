@@ -35,6 +35,7 @@ pub fn renderInterleavedAlloc(comptime T: type, allocator: std.mem.Allocator, pl
 
         try plan.render(block);
 
+        // we are using just a plain buffer here b ut the idea is that will be a more efficient interleaver in the future, and we want to test the interface
         const dst = interleaved[first_frame * channel_count ..][0 .. frames * channel_count];
         try buffer.interleave(T, dst, block.asConst());
 

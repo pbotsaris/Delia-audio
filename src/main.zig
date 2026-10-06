@@ -5,6 +5,7 @@ const audio_specs = @import("common/audio_specs.zig");
 const ex = @import("examples.zig");
 
 const backends = @import("backends/backends.zig");
+const legacy_backends = @import("legacy/backends/backends.zig"); // examples.zig plays through it until M4a
 
 pub const std_options: std.Options = .{
     .log_level = .debug,
@@ -29,29 +30,28 @@ pub fn main() !void {
 
     graph.examples.offlineFanIn();
 
-    // backends.alsa.examples.printingHardwareInfo();
-    // backends.alsa.examples.findAndPrintCardPortInfo("USB");
-    // backends.alsa.examples.selectAudioPortCounterpart();
-    // backends.alsa.examples.fullDuplexCallbackWithLatencyProbe();
-    // backends.alsa.examples.fullDuplexCallbackWithLatencyProbe();
-    // backends.alsa.examples.halfDuplexCapture();
-    // backends.alsa.examples.fullDuplexCallbackUnlinkedDevices();
-    // backends.alsa.examples.playbackSineWave();
-
-    // backends.alsa.examples.usingHardwareToInitDevice();
+    // legacy_backends.alsa.examples.printingHardwareInfo();
+    // legacy_backends.alsa.examples.findAndPrintCardPortInfo("USB");
+    // legacy_backends.alsa.examples.selectAudioPortCounterpart();
+    // legacy_backends.alsa.examples.fullDuplexCallbackWithLatencyProbe();
+    // legacy_backends.alsa.examples.halfDuplexCapture();
+    // legacy_backends.alsa.examples.fullDuplexCallbackUnlinkedDevices();
+    // legacy_backends.alsa.examples.playbackSineWave();
+    // legacy_backends.alsa.examples.usingHardwareToInitDevice();
 }
 
 test {
     _ = backends;
     _ = dsp;
     _ = graph;
-    _ = @import("legacy/graph/graph.zig"); // old scheduler; examples.zig uses it until M4
+    _ = @import("legacy/graph/graph.zig"); // old scheduler; examples.zig uses it until M4a
+    _ = legacy_backends;
     _ = audio_specs;
     _ = @import("common/audio_buffer.zig");
     _ = @import("core/buffer/buffer.zig");
     _ = @import("utils/utils.zig");
 
     // examples have no tests; reference them so they keep compiling
-    std.testing.refAllDecls(backends.alsa.examples);
+    std.testing.refAllDecls(legacy_backends.alsa.examples);
     std.testing.refAllDecls(ex.Example);
 }
