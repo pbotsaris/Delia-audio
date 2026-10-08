@@ -386,18 +386,17 @@ pub const Negotiated = struct {
     channel_count: u32,
     period_frames: usize,
     buffer_frames: usize,
-
 };
 pub const DeviceError = error{
     open,
     hw_params,
     access_unsupported, // only MMAP_INTERLEAVED in M4a (contract 3, row 4)
     format_unsupported,
-period_changed, // the hardware moved period or buffer size away from the request
+    period_changed, // the hardware moved period or buffer size away from the request
     channels_unsupported,
     rate_unsupported,
     prepare,
-sw_params,
+    sw_params,
     area_geometry,
     not_prepared,
 } || std.mem.Allocator.Error;

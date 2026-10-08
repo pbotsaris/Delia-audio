@@ -19,6 +19,8 @@ This report consolidates our discussion and adds a targeted inspection of the pu
 
 **M3 complete (29 September 2026):** the graph contract is `docs/graph-contract.md`, implemented in `src/graph/` (`node.zig`, `builder.zig`, `compiler.zig`, `plan.zig`, `nodes/`) and wired into `zig build test` (173/173 passing). All 11 acceptance items in the contract have a test. `src/graph/examples.zig` renders a fan-in graph offline and interleaves it at the boundary; `zig build run` runs it. `ProcessContext` moved from `core/buffer` to `Node(T)`. The old graph and scheduler moved unchanged to `src/legacy/graph/`; `src/examples.zig` (ALSA playback) still uses them and migrates in M4. Buffer reuse and in-place execution are deferred: the compiler assigns one slot per output port.
 
+**M4a in progress (6 October 2026):** the backend contract is `docs/backend-contract.md`, implemented for playback in `src/backends/alsa/` (`device.zig`, `pcm.zig`, `loop.zig`, `convert.zig`; README there). `PlaybackDevice` runs the full init/prepare/start/stop/deinit path on ALSA's `null` plugin under `zig build test` (119/119 passing). `src/legacy/` (old graph, scheduler, backend) and `src/common/audio_buffer.zig` are deleted; `common` is `audio_specs` only. Still owed for M4a: `src/examples.zig` playing an `ExecutionPlan` through `PlaybackDevice`, and the documented `hw:` run in `src/backends/alsa/README.md`.
+
 ## Contents
 
 1. [Project direction and scope](#1-project-direction-and-scope)

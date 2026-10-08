@@ -2,7 +2,6 @@ const std = @import("std");
 
 /// ALSA is vendored as a git submodule and linked statically.
 /// On first build, `configure && make` run inside `vendor/alsa` to produce `libasound.a`.
-
 const Alsa = struct {
     const src_dir = "vendor/alsa";
     const lib_path = "src/.libs/libasound.a";
@@ -104,25 +103,6 @@ pub fn build(b: *std.Build) void {
     });
     backends.addImport("alsa", alsa);
 
-    // Frozen until M4; wired only so the tree keeps building.
-    const legacy_graph = b.createModule(.{
-        .root_source_file = b.path("src/legacy/graph/graph.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    legacy_graph.addImport("common", common);
-    legacy_graph.addImport("dsp", dsp);
-
-    const legacy_backends = b.createModule(.{
-        .root_source_file = b.path("src/legacy/backends/backends.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    legacy_backends.addImport("common", common);
-    legacy_backends.addImport("utils", utils);
-    legacy_backends.addImport("dsp", dsp);
-    Alsa.link(b, legacy_backends);
-
     // One root module shared by the executable, the compile-only check, and the tests.
     const root = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -138,15 +118,12 @@ pub fn build(b: *std.Build) void {
         .{ .name = "graph", .mod = graph },
         .{ .name = "alsa", .mod = alsa },
         .{ .name = "backends", .mod = backends },
-        .{ .name = "legacy_graph", .mod = legacy_graph },
-        .{ .name = "legacy_backends", .mod = legacy_backends },
     };
 
     for (modules) |m| root.addImport(m.name, m.mod);
 
     ////////////////////////// BUILD / RUN ///////////////////////////////////////
     const exe = b.addExecutable(.{
-
         .name = "delia",
         .root_module = root,
     });

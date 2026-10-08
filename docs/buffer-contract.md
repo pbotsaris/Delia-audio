@@ -14,8 +14,8 @@ implementation. It uses older names (`BlockError`, `block()`, `slot()`); the cod
 | `ops.zig` | `clear`, `copy`, `accumulate`, `interleave`, `deinterleave`, `blocksOverlap` |
 | `shape.zig` | `Shape`, `AudioBufferError`, alignment and size arithmetic |
 
-The new types live alongside `src/common/audio_buffer.zig`. The old types stay untouched
-until the scheduler migrates in M3.
+The old views (`src/common/audio_buffer.zig`: `ChannelView`, `UnmanagedChannelView`,
+`UniformChannelViews`) were deleted with the legacy graph and backend in M4a (October 2026).
 
 ## 1. Types
 

@@ -14,7 +14,7 @@ Delia is a Zig DSP library and realtime audio runtime, built as a learning proje
 - Initial scope: planar `f32` graph audio, single render thread, acyclic graph, declared max block size, one clock domain. Reject unsupported configs explicitly.
 - Linux backend is direct ALSA. JACK or PipeWire interop is optional future work, not a dependency. A Delia-owned server comes later, on top of the engine.
 - Milestones M0..M7 (baseline, buffer contracts, planned FFT, offline graph slice, backend integration, control/plan replacement, measured optimization, server). The immediate next work is **ownership and execution contracts**, not SIMD.
-- Working order is M1, M3, M2. M0, M1 and M3 are done; the next milestone is M2 (planned scalar FFT), then M4 (ALSA on the new graph).
+- Working order is M1, M3, M4, M2. M0, M1 and M3 are done; M4a (ALSA playback on the new graph) is in progress: the backend code is in and tested on the `null` plugin, `src/examples.zig` and the documented `hw:` run are still owed. Then M4b (scripted-PCM tests), M4c (full duplex), M2 (planned scalar FFT).
 
 ## Toolchain
 
@@ -35,7 +35,7 @@ zig build test -Dtest-filter=FFT   # only tests whose name contains the string (
 zig build bench                    # zbench microbenchmarks in src/benchmarks.zig (compare with bench.txt)
 ```
 
-ALSA is linked statically from `vendor/alsa/src/.libs/libasound.a`, built on first `zig build` from the submodule; it is attached to the `alsa` and `legacy_backends` modules only. zBench is pinned to v0.13.0, the last release that targets Zig 0.16.
+ALSA is linked statically from `vendor/alsa/src/.libs/libasound.a`, built on first `zig build` from the submodule; it is attached to the `alsa` module only. zBench is pinned to v0.13.0, the last release that targets Zig 0.16.
 
 ### Modules
 
@@ -45,14 +45,14 @@ Every subsystem is a named module declared in `build.zig`, and files import acro
 |---|---|---|
 | `buffer` | `src/core/buffer/root.zig` | — |
 | `utils` | `src/utils/root.zig` | — |
-| `common` | `src/common/root.zig` (`audio_specs`, `audio_buffer`) | — |
+| `common` | `src/common/root.zig` (`audio_specs`) | — |
 | `dsp` | `src/dsp/dsp.zig` | `common` |
 | `graph` | `src/graph/root.zig` | `buffer`, `common` |
 | `alsa` | `src/backends/alsa/root.zig` | `buffer` (+ ALSA) |
 | `backends` | `src/backends/root.zig` | `alsa` |
-| `legacy_graph` | `src/legacy/graph/graph.zig` | `common`, `dsp` |
-| `legacy_backends` | `src/legacy/backends/backends.zig` | `common`, `utils`, `dsp` (+ ALSA) |
 | root | `src/main.zig` | all of the above |
+
+`utils` currently has no importer besides root; it stays as a leaf module with its own tests.
 
 So `src/graph/plan.zig` writes `const buffer = @import("buffer");` and `const specs = @import("common").audio_specs;`. Within a module, sibling files are still imported by relative path (`@import("node.zig")`, `@import("nodes/root.zig")`). Two compiler rules make the table the real dependency graph: a file belongs to exactly one module, and a module may only import files under its root's directory. A new cross-module edge is therefore a `addImport` line in `build.zig`, and a cycle is a compile error. `root.zig` is the module-root filename by convention (what `zig init` uses); nothing depends on the name.
 
@@ -67,7 +67,7 @@ zig test src/dsp/transforms.zig
 zig test src/core/buffer/root.zig --test-filter "AudioBlock"
 ```
 
-Anything that says `@import("buffer")`, `@import("common")`, etc. (all of `graph/`, `backends/alsa/`, `legacy/`, `dsp/waves.zig`) has no module table under bare `zig test`; use `zig build test -Dtest-filter=...`. The sketches in `docs/examples/` are self-contained and run with `zig test docs/examples/<file>.zig`.
+Anything that says `@import("buffer")`, `@import("common")`, etc. (all of `graph/`, `backends/alsa/`, `dsp/waves.zig`) has no module table under bare `zig test`; use `zig build test -Dtest-filter=...`. The sketches in `docs/examples/` are self-contained and run with `zig test docs/examples/<file>.zig`.
 
 `zig ast-check <file>` checks one file for syntax and AST-level errors with no build wiring. Use it as the first pass on any file you touch; it does not catch std API mismatches.
 
@@ -82,19 +82,21 @@ Three layers, wired together only at the top:
 ```
 dsp/        allocating analysis kernels (FFT, waves, filters, complex storage)
 graph/      GraphBuilder -> Compiler -> ExecutionPlan, on core/buffer (contract: docs/graph-contract.md)
-backends/   ALSA devices; comptime-specialized on a user Context type + callback
-core/       buffer/ (buffer contract: docs/buffer-contract.md); used by graph/
-common/     audio_specs (BufferSize/BlockSize/SampleRate enums) and audio_buffer (old views + pool)
-legacy/     graph/: the old Graph -> TopologyQueue -> Scheduler, frozen until M4
+backends/   alsa/: PlaybackDevice -> PlaybackLoop -> AlsaPcm seam, on core/buffer (contract: docs/backend-contract.md)
+core/       buffer/ (buffer contract: docs/buffer-contract.md); used by graph/ and backends/
+common/     audio_specs (BufferSize/BlockSize/SampleRate enums)
 ```
 
-`src/graph/examples.zig` shows the offline path (build, compile, render, interleave). `src/examples.zig` is ALSA playback on the legacy scheduler and is the only non-test user of `legacy/`. Nothing new imports `legacy/`.
+`src/graph/examples.zig` shows the offline path (build, compile, render, interleave). `src/examples.zig` is the top-level playback example (an `ExecutionPlan` through `PlaybackDevice`) and `src/backends/alsa/examples.zig` holds backend-only examples; both are skeletons being written by hand as part of M4a. The old graph, scheduler, backend and buffer views (`src/legacy/`, `src/common/audio_buffer.zig`) were deleted in October 2026; they are in git history before the `remove legacy graph and backend` commit. Do not reintroduce them.
 
-### Comptime Context pattern (backends)
+### ALSA backend
 
-Every device type is a generic over the caller's context struct: `alsa.driver.HalfDuplexDevice(Ctx, .{ .format = ... })`, `FullDuplexDevice(...)`. The device is `start(ctx_ptr, callback)`ed with a callback of the form `fn (ctx: *Ctx, data: Device.AudioDataType()) void`. The sample format is a comptime option, and `Device.FloatType()` gives the float type the callback works in. `GenericAudioData(format)` wraps the raw device byte buffer and converts to/from that float type on `write`/`readSample`.
+Four files under `src/backends/alsa/` (details in its `README.md`), imported through the `backends` module as `backends.alsa.device`, `.loop`, `.pcm`, `.convert`:
 
-ALSA device options are negotiated at `init`/`prepare` (hardware buffer = `buffer_size * n_periods`, MMAP interleaved with RW fallback). `Hardware` enumerates cards/ports and can find them by substring; `fromHardware` builds a device from a selection. Recovery, linking and transfer invariants for the duplex loops are known-fragile; the plan's section 9.2 lists concrete repair candidates in `driver.zig`.
+- `device.zig`: `PlaybackDevice(Ctx, fmt)` is generic over the caller's context struct and a comptime `SampleFormat`. `init(DeviceOptions)` opens and negotiates hw params (MMAP interleaved only; a moved period or buffer is `period_changed`, a moved rate is reported in `negotiated`). `prepare(allocator)` applies sw params, validates the mmap area geometry once, and allocates the staging buffer. `start(ctx, callback)` runs the loop on the calling thread until `stop()` (callable from another thread) or an unrecoverable error; `deinit(allocator)` after stop.
+- `loop.zig`: `PlaybackLoop(Ctx, Pcm, fmt)` is the transfer policy, generic over the `Pcm` seam so tests drive it with a scripted PCM. Callback is `fn (ctx: *Ctx, out: AudioBlock(f32)) void` with `0 < frame_count <= period_frames`; the callback writes every frame and never allocates, locks, logs or waits. Counters live in `Stats`; the loop never prints.
+- `pcm.zig`: `AlsaPcm` is the thin seam over `snd_pcm_*` and holds the module's **only** `@cImport` (`pcm.c`); a second one would yield an incompatible opaque `snd_pcm_t`. Negative ALSA results become `PcmError` here, nowhere else.
+- `convert.zig`: `SampleConverter(fmt)` encodes/decodes device bytes to and from planar `f32` blocks in one pass; integer encode clamps before scaling.
 
 ### Graph pipeline
 
@@ -107,15 +109,9 @@ Three phases in three files, plus the node contract. Import through the `graph` 
 
 Tests in `compiler.zig` pin exact slot counts and op lists; keep them when touching slot assignment. Every port carries the graph's channel count. Slot reuse and in-place execution are not implemented (open questions in the contract). Replacing a plan means stop, edit, recompile, restart.
 
-`src/legacy/graph/` holds the previous implementation (`Graph`, `TopologyQueue`, `Scheduler` on `UniformChannelViews`). Do not add features to it; it is deleted when the ALSA callback runs on `ExecutionPlan.render`.
-
 ### Buffers
 
-Two implementations coexist until the ALSA backend migrates in M4.
-
-**New (`core/buffer/`, contract in `docs/buffer-contract.md`):** import only the `buffer` module (`src/core/buffer/root.zig`). `AudioBlock(T)` and `ConstAudioBlock(T)` are borrowed planar views (`samples`, `channel_count`, `frame_count`, `channel_stride`) generated from one private `Block(T, mutability)` in `block.zig`; `channel(c)` returns a slice of the active frames. `OwnedAudioBuffer` and `AudioBufferPool` (`storage.zig`) own 64-byte-aligned storage, take the allocator in `init`/`deinit` without storing it, and lend blocks through `borrowBlock`/`borrowSlot`. `ops.zig` has `clear`, `copy`, `accumulate`, `interleave`, `deinterleave`; they return `shape_mismatch` or `forbidden_overlap` and write nothing on failure. `ProcessContext` is defined on `Node(T)` in `src/graph/node.zig`, not here. Interleaved audio exists only as packed slices at device/file boundaries.
-
-**Old (`common/audio_buffer.zig`):** `ChannelView` owns storage, `UnmanagedChannelView` borrows it, `UniformChannelViews` is one contiguous pool exposing N views. Access is interleaved or non-interleaved via a runtime tag; `block_size` doubles as physical stride. Still used by the legacy graph and scheduler. Do not add features to it.
+`core/buffer/`, contract in `docs/buffer-contract.md`: import only the `buffer` module (`src/core/buffer/root.zig`). `AudioBlock(T)` and `ConstAudioBlock(T)` are borrowed planar views (`samples`, `channel_count`, `frame_count`, `channel_stride`) generated from one private `Block(T, mutability)` in `block.zig`; `channel(c)` returns a slice of the active frames. `OwnedAudioBuffer` and `AudioBufferPool` (`storage.zig`) own 64-byte-aligned storage, take the allocator plus an `Options` struct in `init` (`.{ .channel_count, .max_frames }`, plus `.slot_count` for the pool) and the allocator again in `deinit` without storing it, and lend blocks through `borrowBlock`/`borrowSlot`. `ops.zig` has `clear`, `copy`, `accumulate`, `interleave`, `deinterleave`; they return `shape_mismatch` or `forbidden_overlap` and write nothing on failure. `ProcessContext` is defined on `Node(T)` in `src/graph/node.zig`, not here. Interleaved audio exists only as packed slices at device/file boundaries.
 
 ### DSP
 
@@ -128,3 +124,4 @@ Two implementations coexist until the ALSA backend migrates in M4.
 - Logging goes through `std.log.scoped(.alsa | .graph | .dsp | .main)`; `src/logging.zig` filters unknown scopes below `err`. `main.zig`/`examples.zig` set `std_options` with `logFn` from there.
 - Generic types gate `T` with `@compileError` for anything but `f32`/`f64`.
 - Sizes are enums (`BufferSize.buf_512`, `BlockSize.blk_256`, `SampleRate.sr_48000`), converted with `@intFromEnum` or `.toFloat(T)`.
+- Two or more parameters of the same type go in an options struct so the call site names them (`OwnedAudioBuffer.init(allocator, .{ .channel_count = 2, .max_frames = 512 })`, `LoopOptions`, `DeviceOptions`). A swapped `(period_frames, channel_count)` once compiled and would have panicked on the first audio period.

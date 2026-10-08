@@ -1,8 +1,10 @@
 # Backend contract
 
-**Status:** proposed for milestone M4 (`docs/DELIA_REFACTOR_PLAN.md`, section 9). The old
-backend moved unchanged to `src/legacy/backends/`; `src/backends/` is rebuilt against this
-contract and the legacy copy is deleted when M4a's hardware run passes.
+**Status:** in progress for milestone M4 (`docs/DELIA_REFACTOR_PLAN.md`, section 9).
+`src/backends/alsa/` implements sections 3 to 7 for playback (`device.zig`, `pcm.zig`,
+`loop.zig`, `convert.zig`, see its `README.md`); the old backend and graph were deleted in
+October 2026, before the M4a hardware run, and are in git history. Remaining for M4a:
+`src/examples.zig` on `ExecutionPlan` and the documented `hw:` run.
 **Sketches:** two self-contained files under `docs/examples/`.
 `device_loop_sketch.zig` (9 tests, `zig test docs/examples/device_loop_sketch.zig`) drives the
 loop with a scripted PCM, so the transfer rules in section 4 are tested without hardware.
@@ -20,7 +22,7 @@ backend is the callback signature in section 2; everything else here is how the 
 | `src/backends/alsa/convert.zig` | `SampleFormat`, `SampleConverter(fmt)`: device bytes to and from planar `f32` blocks, one pass. Backend-neutral in content; moves up to `src/backends/` when a second backend needs it | no |
 | `src/backends/alsa/loop.zig` | `PcmError`, `Region`, `Stats`, `LoopOptions`, `PlaybackLoop(Ctx, Pcm, fmt)`: the policy, generic over the seam | no |
 | `src/backends/alsa/pcm.zig` | `AlsaPcm`: the seam over `snd_pcm_*`; `regionFromArea` | yes |
-| `src/backends/alsa/driver.zig` | `PlaybackDevice(Ctx, fmt)` (later `CaptureDevice`, `FullDuplexDevice`): open, negotiate, prepare, own the seam and the loop | yes |
+| `src/backends/alsa/device.zig` | `PlaybackDevice(Ctx, fmt)` (later `CaptureDevice`, `FullDuplexDevice`): open, negotiate, prepare, own the seam and the loop | yes |
 | `src/core/buffer/ops.zig` | existing `interleave`/`deinterleave`: `f32` layout change only, used when the device already delivers `f32` | no |
 
 `loop.zig` has no C import on purpose: `zig test` on it needs nothing, and the loop's tests

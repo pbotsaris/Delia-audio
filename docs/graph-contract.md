@@ -18,11 +18,10 @@ this contract and is not repeated here.
 | `src/graph/compiler.zig` | `Compiler(T).compile()`: builder to plan |
 | `src/graph/plan.zig` | `ExecutionPlan(T)`, `Op`, `render()` |
 
-The old graph moved to `src/legacy/graph/` unchanged. `src/examples.zig` still uses its
-scheduler, and `src/main.zig` keeps its tests running, until the ALSA callback runs on
-`ExecutionPlan.render` (M4); then it is deleted. Its buffer assignment shares a producer's buffer
-with its last consumer, which is the in-place optimization this contract defers, so it is not
-reused. Nothing new imports `legacy/`.
+The old graph (`Graph`, `TopologyQueue`, `Scheduler` on `UniformChannelViews`) was deleted in
+M4a (October 2026); it is in git history before the `remove legacy graph and backend` commit.
+Its buffer assignment shared a producer's buffer with its last consumer, which is the in-place
+optimization this contract defers, so it was not reused.
 
 ## 1. Phases
 
